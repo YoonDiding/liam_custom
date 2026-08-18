@@ -19,6 +19,10 @@ export function convertNodesToElkNodes(nodes: Node[]): ElkNode[] {
         'elk.aspectRatio':
           node.type === 'nonRelatedTableGroup' ? '0.5625' : '1.6f',
         'elk.alignment': 'LEFT',
+        // QESG custom: domain groups reserve extra top padding for the label
+        ...(node.type === 'tableGroup'
+          ? { 'elk.padding': '[top=56,left=32,bottom=32,right=32]' }
+          : {}),
       },
     }
     nodeMap[node.id] = elkNode

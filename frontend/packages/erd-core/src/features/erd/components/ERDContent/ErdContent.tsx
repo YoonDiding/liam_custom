@@ -22,6 +22,7 @@ import {
   NonRelatedTableGroupNode,
   RelationshipEdge,
   Spinner,
+  TableGroupNode,
   TableNode,
 } from './components'
 import styles from './ERDContent.module.css'
@@ -31,6 +32,7 @@ import { useInitialAutoLayout, useQueryParamsChanged } from './hooks'
 const nodeTypes = {
   table: TableNode,
   nonRelatedTableGroup: NonRelatedTableGroupNode,
+  tableGroup: TableGroupNode,
 }
 
 const edgeTypes = {

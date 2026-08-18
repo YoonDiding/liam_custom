@@ -3,6 +3,12 @@ import { constraintsToRelationships } from '@liam-hq/schema'
 import type { Edge, Node } from '@xyflow/react'
 import type { ShowMode } from '../../../schemas/showMode'
 import { NON_RELATED_TABLE_GROUP_NODE_ID, zIndex } from '../constants'
+import {
+  DOMAIN_TAG_PATTERN,
+  TABLE_GROUP_NODE_TYPE,
+  tableGroupData,
+  tableGroupNodeId,
+} from '../tableGroups'
 import { columnHandleId } from './'
 
 type Params = {
@@ -39,10 +45,23 @@ export const convertSchemaToNodes = ({
     })
   }
 
+  // QESG custom: assign domain groups from table-comment tags
+  const domainOf = new Map<string, string>()
+  for (const table of tables) {
+    const matched = table.comment?.match(DOMAIN_TAG_PATTERN)
+    const domainName = matched?.[1]?.trim()
+    if (domainName) {
+      domainOf.set(table.name, domainName)
+    }
+  }
+  const domainNames = Array.from(new Set(domainOf.values()))
+
   // Create table nodes and check if any need NON_RELATED_TABLE_GROUP_NODE_ID as parent
   let hasNonRelatedTables = false
   const tableNodes = tables.map((table) => {
-    const isNonRelatedTable = !tablesWithRelationships.has(table.name)
+    const domainName = domainOf.get(table.name)
+    const isNonRelatedTable =
+      !tablesWithRelationships.has(table.name) && domainName === undefined
 
     if (isNonRelatedTable) {
       hasNonRelatedTables = true
@@ -59,14 +78,25 @@ export const convertSchemaToNodes = ({
       position: { x: 0, y: 0 },
       ariaLabel: `${table.name} table`,
       zIndex: zIndex.nodeDefault,
-      ...(isNonRelatedTable
-        ? { parentId: NON_RELATED_TABLE_GROUP_NODE_ID }
-        : {}),
+      ...(domainName !== undefined
+        ? { parentId: tableGroupNodeId(domainName) }
+        : isNonRelatedTable
+          ? { parentId: NON_RELATED_TABLE_GROUP_NODE_ID }
+          : {}),
     }
   })
 
+  // Domain group nodes must precede their children in the array (React Flow)
+  const domainGroupNodes: Node[] = domainNames.map((name) => ({
+    id: tableGroupNodeId(name),
+    type: TABLE_GROUP_NODE_TYPE,
+    data: tableGroupData(name),
+    position: { x: 0, y: 0 },
+  }))
+
   // Only include NON_RELATED_TABLE_GROUP_NODE_ID if there are tables that need it
   const nodes: Node[] = [
+    ...domainGroupNodes,
     ...(hasNonRelatedTables
       ? [
           {
