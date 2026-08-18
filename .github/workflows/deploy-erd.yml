@@ -1,0 +1,42 @@
+# QESG ERD — schemas/ 갱신 시 Liam ERD를 빌드해 GitHub Pages로 배포.
+# 지금은 공개 배포판 CLI(@liam-hq/cli)로 빌드한다. 이 포크의 erd-core를
+# 커스텀(영역 그룹 등)하면 이 단계는 모노레포 빌드로 교체한다.
+name: Deploy ERD to Pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - "schemas/**"
+      - ".github/workflows/deploy-erd.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx -y @liam-hq/cli erd build --input schemas/qesg_schema.sql --format postgres
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true   # 첫 실행에서 Pages 자동 활성화
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
