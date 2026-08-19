@@ -260,7 +260,7 @@ CREATE TABLE core.indicator_derivation (
   "unit_rule" varchar(60),
   "note" text
 );
-COMMENT ON TABLE core.indicator_derivation IS '[영역:규칙·기록] [신규] L3 · 파생 규칙 (축 8) — 포스코 0.978 재발 차단';
+COMMENT ON TABLE core.indicator_derivation IS '[영역:규칙 및 히스토리] [신규] L3 · 파생 규칙 (축 8) — 포스코 0.978 재발 차단';
 COMMENT ON COLUMN core.indicator_derivation."basis_constraint" IS 'enum: same_basis|any · same_basis면 분자·분모 basis 불일치 시 계산 거부';
 COMMENT ON COLUMN core.indicator_derivation."formula" IS 'enum: divide|ratio|weighted_avg';
 
@@ -276,7 +276,7 @@ CREATE TABLE core.rule_param (
   "valid_to" date,
   UNIQUE ("indicator_code", "source_code", "rule_key")
 );
-COMMENT ON TABLE core.rule_param IS '[영역:규칙·기록] [신규] L3 · 축 15. 판정 파라미터만 — UPDATE 금지, 변경=새 행(SCD). UNIQUE(+valid_from)+기간겹침 EXCLUDE로 재현성 보장. 값의 rule_applied가 ''{id}:{rule_key}''로 행 PK를 직접 참조(260819)';
+COMMENT ON TABLE core.rule_param IS '[영역:규칙 및 히스토리] [신규] L3 · 축 15. 판정 파라미터만 — UPDATE 금지, 변경=새 행(SCD). UNIQUE(+valid_from)+기간겹침 EXCLUDE로 재현성 보장. 값의 rule_applied가 ''{id}:{rule_key}''로 행 PK를 직접 참조(260819)';
 COMMENT ON COLUMN core.rule_param."indicator_code" IS 'NULL=전역 기본값';
 COMMENT ON COLUMN core.rule_param."source_code" IS 'NULL=출처 무관';
 COMMENT ON COLUMN core.rule_param."rule_key" IS '현재 4값: total_row·unit_scale·missing_policy·row_filter. CHECK 없음(의도) · 동일 스코프 유효기간 겹침 금지(EXCLUDE gist)';
@@ -290,7 +290,7 @@ CREATE TABLE core.canonical_rule (
   "tie_breaker" varchar(30),
   "note" text
 );
-COMMENT ON TABLE core.canonical_rule IS '[영역:규칙·기록] [신규] L3 · 대표 선택 규칙 (축 14). 코드 3벌→표 1벌. basis_preference가 source_order보다 앞. 기존 indicator_source_config(161행) 흡수 → 포털 7곳 동반 수정';
+COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · 대표 선택 규칙 (축 14). 코드 3벌→표 1벌. basis_preference가 source_order보다 앞. 기존 indicator_source_config(161행) 흡수 → 포털 7곳 동반 수정';
 COMMENT ON COLUMN core.canonical_rule."basis_preference" IS '1순위 축';
 COMMENT ON COLUMN core.canonical_rule."source_order" IS '2순위 타이브레이크';
 COMMENT ON COLUMN core.canonical_rule."tie_breaker" IS 'enum: latest_collected|highest_status|manual';
@@ -371,7 +371,7 @@ CREATE TABLE ops.indicator_data_history (
   "old_value" jsonb,
   "new_value" jsonb
 );
-COMMENT ON TABLE ops.indicator_data_history IS '[영역:규칙·기록] [신규] L3 · 이력 (축 11). 🔴 소급 불가 — 이관보다 먼저 걸어야 이관 자체가 기록에 남는다. data_id에 FK 없음(의도 — 원본 삭제돼도 이력 존속)';
+COMMENT ON TABLE ops.indicator_data_history IS '[영역:규칙 및 히스토리] [신규] L3 · 이력 (축 11). 🔴 소급 불가 — 이관보다 먼저 걸어야 이관 자체가 기록에 남는다. data_id에 FK 없음(의도 — 원본 삭제돼도 이력 존속)';
 COMMENT ON COLUMN ops.indicator_data_history."data_id" IS '논리 관계 (FK 미선언 — 의도)';
 COMMENT ON COLUMN ops.indicator_data_history."change_type" IS 'enum: insert|update|correct|delete|reassign · reassign=회사 귀속 변경 — 삭제+삽입을 한 이력 행에 묶는다';
 COMMENT ON COLUMN ops.indicator_data_history."reason" IS '일회성 수정인지 규칙 문제인지 구별하는 유일한 단서. N번 반복되면 rule_param으로 승격';
@@ -388,7 +388,7 @@ CREATE TABLE ops.data_quality_flag (
   "resolved_by" varchar(60),
   "resolution" varchar(30)
 );
-COMMENT ON TABLE ops.data_quality_flag IS '[영역:규칙·기록] [신규] L3 · 품질 플래그 (축 13). ''의심스럽지만 원문대로 적었다''를 담는 자리. 미해소 플래그 조회=검수 큐. 재수집이 지우지 않는다';
+COMMENT ON TABLE ops.data_quality_flag IS '[영역:규칙 및 히스토리] [신규] L3 · 품질 플래그 (축 13). ''의심스럽지만 원문대로 적었다''를 담는 자리. 미해소 플래그 조회=검수 큐. 재수집이 지우지 않는다';
 COMMENT ON COLUMN ops.data_quality_flag."data_id" IS 'ON DELETE CASCADE';
 COMMENT ON COLUMN ops.data_quality_flag."rule" IS 'enum: unit_suspect|multi_source_divergence|carry_forward|similar_name_match|outlier|manual_override_stale';
 COMMENT ON COLUMN ops.data_quality_flag."severity" IS 'enum: info|warn|block';
