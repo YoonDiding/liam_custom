@@ -272,12 +272,16 @@ CREATE TABLE core.rule_param (
   "params" jsonb NOT NULL,
   "note" text,
   "updated_at" timestamptz,
+  "valid_from" date NOT NULL,
+  "valid_to" date,
   UNIQUE ("indicator_code", "source_code", "rule_key")
 );
-COMMENT ON TABLE core.rule_param IS '[영역:규칙·기록] [신규] L3 · 산출 규칙 파라미터 (축 15). params에 조건문·수식 금지 — 알고리즘은 코드, 여기엔 재료만';
+COMMENT ON TABLE core.rule_param IS '[영역:규칙·기록] [신규] L3 · 축 15. 판정 파라미터만 — UPDATE 금지, 변경=새 행(SCD). UNIQUE(+valid_from)+기간겹침 EXCLUDE로 재현성 보장. 값의 rule_applied가 ''{id}:{rule_key}''로 행 PK를 직접 참조(260819)';
 COMMENT ON COLUMN core.rule_param."indicator_code" IS 'NULL=전역 기본값';
 COMMENT ON COLUMN core.rule_param."source_code" IS 'NULL=출처 무관';
-COMMENT ON COLUMN core.rule_param."rule_key" IS '현재 4값: total_row·unit_scale·missing_policy·row_filter. CHECK 없음(의도)';
+COMMENT ON COLUMN core.rule_param."rule_key" IS '현재 4값: total_row·unit_scale·missing_policy·row_filter. CHECK 없음(의도) · 동일 스코프 유효기간 겹침 금지(EXCLUDE gist)';
+COMMENT ON COLUMN core.rule_param."valid_from" IS '[신설] · 260819 신설 — 용도는 현행 규칙 선택. 검증 재현은 id 참조가 담당';
+COMMENT ON COLUMN core.rule_param."valid_to" IS '[신설]';
 
 CREATE TABLE core.canonical_rule (
   "indicator_code" varchar(20) PRIMARY KEY,
@@ -419,6 +423,68 @@ CREATE TABLE serving.v_fact_canonical (
 );
 COMMENT ON TABLE serving.v_fact_canonical IS '[영역:서빙] [VIEW] [예정] L4 · 대표값 구체화 뷰 — canonical_rule(basis_preference→source_order)을 풀어 출처는 접고 기준은 편다. 뷰로는 규모를 못 버팀(순위표 2,500사×지표, mv_industry_avg 233,995행 선례) → matview + 적재 후 리프레시, 응답에 as_of 필수. DDL은 골격만 — canonical_rule 확정 시 본문 작성';
 
+CREATE TABLE raw.source_document (
+  "id" bigint PRIMARY KEY,
+  "source_type" varchar(30) NOT NULL,
+  "doc_type" varchar(30) NOT NULL,
+  "company_id" integer,
+  "company_raw" varchar(200),
+  "fiscal_year" varchar(4) NOT NULL,
+  "lang" varchar(5),
+  "title" text,
+  "published_date" date,
+  "period_start" date,
+  "period_end" date,
+  "report_scope_raw" text,
+  "basis_default" varchar(20),
+  "basis_geo_default" varchar(20),
+  "pages" integer,
+  "file_path" text,
+  "file_hash" varchar(64) UNIQUE,
+  "note" text,
+  "created_at" timestamptz NOT NULL,
+  "updated_at" timestamptz NOT NULL
+);
+COMMENT ON TABLE raw.source_document IS '[영역:파이프라인] [신규] L0 · 문서 인스턴스 — 보고서 한 부=행 하나(불변, 새 판=새 행). evidence.doc_ref가 SRDOC:{id}로 가리키는 대상. 다판본 허용, file_hash로 물리 중복만 검출. 근거: 260818 SR 전수조사(제목≠FY 25부·밸류업 오분류 10부·md5 중복 5쌍)';
+COMMENT ON COLUMN raw.source_document."source_type" IS 'SR·FACTBOOK… L0는 잘게(축 18)';
+COMMENT ON COLUMN raw.source_document."doc_type" IS 'enum: SR|FACTBOOK|DATABOOK|CLIMATE_REPORT|VALUE_UP|OTHER · VALUE_UP 명시 = 밸류업 오분류 10부 실측이 근거';
+COMMENT ON COLUMN raw.source_document."company_raw" IS '원문 회사 표기(보강 전) — L0 원칙';
+COMMENT ON COLUMN raw.source_document."fiscal_year" IS '대상 회계연도 — 발간연도 아님(''2025 Report'' 25부가 FY2024)';
+COMMENT ON COLUMN raw.source_document."report_scope_raw" IS '보고범위 원문. 값의 범위 정본은 값 행(basis_*) — 이건 폴백. 사다리: 셀 주석>문서 기본>출처 기본표>unknown';
+COMMENT ON COLUMN raw.source_document."basis_default" IS 'enum: separate|consolidated|group_sum|site|unknown';
+COMMENT ON COLUMN raw.source_document."basis_geo_default" IS 'enum: domestic|domestic_overseas|unknown';
+COMMENT ON COLUMN raw.source_document."file_hash" IS '판본·중복 검출(260818 md5 실측)';
+
+CREATE TABLE raw.c_kisa_disclosure (
+  "id" bigint PRIMARY KEY,
+  "publish_year" varchar(4) NOT NULL,
+  "fiscal_year" varchar(4) NOT NULL,
+  "company_raw" varchar(200) NOT NULL,
+  "company_id" integer,
+  "invest_amount" numeric(18,2),
+  "invest_unit" varchar(20),
+  "staff_cnt" numeric(10,1),
+  "ciso_is_exec" char(1),
+  "ciso_is_dual" char(1),
+  "cpo_is_exec" char(1),
+  "cpo_is_dual" char(1),
+  "detail_url" text,
+  "raw_data" jsonb NOT NULL,
+  "crawled_at" timestamptz NOT NULL,
+  "created_at" timestamptz NOT NULL,
+  UNIQUE ("company_raw", "publish_year")
+);
+COMMENT ON TABLE raw.c_kisa_disclosure IS '[영역:파이프라인] [신규] L0 · KISA 정보보호공시 원본 — 공시 1건=행 1개(불변, 와이드). S48 값들의 파생원, doc_ref KISA:{id}. 구 sub exists_yn·unit 폐기(행 유무·invest_unit이 대체, 크로스워크 260819 확정). 어댑터 개조는 계약 이행 단계, 초기 백필=기존 JSON 리소스';
+COMMENT ON COLUMN raw.c_kisa_disclosure."publish_year" IS '공시연도. fiscal_year=publish_year-1(어댑터 규칙)';
+COMMENT ON COLUMN raw.c_kisa_disclosure."company_raw" IS 'KISA 표기 원문(보강 전)';
+COMMENT ON COLUMN raw.c_kisa_disclosure."invest_amount" IS '정보보호부문 투자액 — 원문 수치';
+COMMENT ON COLUMN raw.c_kisa_disclosure."invest_unit" IS '원문 단위. 정규화는 파생 시(축 5)';
+COMMENT ON COLUMN raw.c_kisa_disclosure."ciso_is_exec" IS 'enum: Y|N';
+COMMENT ON COLUMN raw.c_kisa_disclosure."ciso_is_dual" IS 'enum: Y|N';
+COMMENT ON COLUMN raw.c_kisa_disclosure."cpo_is_exec" IS 'enum: Y|N';
+COMMENT ON COLUMN raw.c_kisa_disclosure."cpo_is_dual" IS 'enum: Y|N';
+COMMENT ON COLUMN raw.c_kisa_disclosure."raw_data" IS '크롤 원문 통째(불변) — 재파싱 재료';
+
 ALTER TABLE raw.etl_job_log ADD FOREIGN KEY ("job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("crawl_job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("committed_data_id") REFERENCES ops.indicator_data ("id");
@@ -437,3 +503,5 @@ ALTER TABLE ops.indicator_data ADD FOREIGN KEY ("component_id") REFERENCES core.
 ALTER TABLE ops.evidence ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE ops.indicator_data_history ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE ops.data_quality_flag ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
+ALTER TABLE raw.source_document ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE raw.c_kisa_disclosure ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
