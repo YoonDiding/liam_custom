@@ -183,7 +183,7 @@ CREATE TABLE core.indicator_component (
   "created_at" timestamptz,
   UNIQUE ("indicator_code", "component_code", "valid_from")
 );
-COMMENT ON TABLE core.indicator_component IS '[영역:사전] [신규] L1 · Q. 이 항목은 무엇을 재는가? — 항목의 정의만 담고 출처 정보는 담지 않는다. role 6종(aggregate/component/derived/asreported/flag/attribute), parent_code(어느 합계의 부분인지), 정의가 바뀌면 기존 행을 수정하지 않고 valid_to를 닫고 새 행을 만든다(SCD Type 2). 구 sub 494행이 460개로 정리됨';
+COMMENT ON TABLE core.indicator_component IS '[영역:사전] [신규] L1 · Q. 이 항목은 무엇을 재는가? — 항목의 정의만 담고 출처 정보는 담지 않는다. role 6종(aggregate/component/derived/asreported/flag/attribute), parent_code(어느 합계의 부분인지), 정의가 바뀌면 기존 행을 수정하지 않고 valid_to를 닫고 새 행을 만든다(SCD Type 2). 구 sub 494행이 460개로 정리됨. S48 항목들은 이 표의 정의 없이 raw의 KISA 원본 테이블(c_kisa_disclosure, ERD 밖 c_* 출처원본 부류)에 행이 있는지로 판단';
 COMMENT ON COLUMN core.indicator_component."role" IS 'enum: aggregate|component|derived|asreported|flag|attribute · attribute=측정값 아닌 레코드 필드(date·cause 등)';
 COMMENT ON COLUMN core.indicator_component."parent_code" IS '어느 합계에 속하나 (E7 airtotal←nox·sox·pm). NULL 통일, '''' 금지';
 COMMENT ON COLUMN core.indicator_component."valid_from" IS '축 16. 개념이 유효한 시점 (수집 시점 아님)';
@@ -455,36 +455,6 @@ COMMENT ON COLUMN raw.source_document."basis_default" IS 'enum: separate|consoli
 COMMENT ON COLUMN raw.source_document."basis_geo_default" IS 'enum: domestic|domestic_overseas|unknown';
 COMMENT ON COLUMN raw.source_document."file_hash" IS '판본·중복 검출(260818 md5 실측)';
 
-CREATE TABLE raw.c_kisa_disclosure (
-  "id" bigint PRIMARY KEY,
-  "publish_year" varchar(4) NOT NULL,
-  "fiscal_year" varchar(4) NOT NULL,
-  "company_raw" varchar(200) NOT NULL,
-  "company_id" integer,
-  "invest_amount" numeric(18,2),
-  "invest_unit" varchar(20),
-  "staff_cnt" numeric(10,1),
-  "ciso_is_exec" char(1),
-  "ciso_is_dual" char(1),
-  "cpo_is_exec" char(1),
-  "cpo_is_dual" char(1),
-  "detail_url" text,
-  "raw_data" jsonb NOT NULL,
-  "crawled_at" timestamptz NOT NULL,
-  "created_at" timestamptz NOT NULL,
-  UNIQUE ("company_raw", "publish_year")
-);
-COMMENT ON TABLE raw.c_kisa_disclosure IS '[영역:파이프라인] [신규] L0 · Q. KISA 정보보호공시 원문은? — 공시 1건이 행 1개(수정 안 함). S48 지표 값들이 이 테이블에서 파생되고, doc_ref는 KISA:{id} 형식. 예전 sub의 exists_yn은 별도 값 없이 여기에 행이 있는지로 판단한다';
-COMMENT ON COLUMN raw.c_kisa_disclosure."publish_year" IS '공시연도. fiscal_year=publish_year-1(어댑터 규칙)';
-COMMENT ON COLUMN raw.c_kisa_disclosure."company_raw" IS 'KISA 표기 원문(보강 전)';
-COMMENT ON COLUMN raw.c_kisa_disclosure."invest_amount" IS '정보보호부문 투자액 — 원문 수치';
-COMMENT ON COLUMN raw.c_kisa_disclosure."invest_unit" IS '원문 단위. 정규화는 파생 시(축 5)';
-COMMENT ON COLUMN raw.c_kisa_disclosure."ciso_is_exec" IS 'enum: Y|N';
-COMMENT ON COLUMN raw.c_kisa_disclosure."ciso_is_dual" IS 'enum: Y|N';
-COMMENT ON COLUMN raw.c_kisa_disclosure."cpo_is_exec" IS 'enum: Y|N';
-COMMENT ON COLUMN raw.c_kisa_disclosure."cpo_is_dual" IS 'enum: Y|N';
-COMMENT ON COLUMN raw.c_kisa_disclosure."raw_data" IS '크롤 원문 통째(불변) — 재파싱 재료';
-
 ALTER TABLE raw.etl_job_log ADD FOREIGN KEY ("job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("crawl_job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("committed_data_id") REFERENCES ops.indicator_data ("id");
@@ -504,4 +474,3 @@ ALTER TABLE ops.evidence ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_da
 ALTER TABLE ops.indicator_data_history ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE ops.data_quality_flag ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE raw.source_document ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
-ALTER TABLE raw.c_kisa_disclosure ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
