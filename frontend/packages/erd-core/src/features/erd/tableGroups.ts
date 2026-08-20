@@ -42,6 +42,16 @@ const META: Record<string, TableGroupMeta> = {
     description:
       '사용자에게 보여지는 층 — 모든 데이터를 하나의 표로 펼치고, 규칙 영역에서 정한 대푯값을 제공.',
   },
+  '출처 원본': {
+    color: '#8A7DBE',
+    description:
+      '출처 사이트에서 긁어온 그대로를 보관하는 테이블들 — 출처가 늘면 여기에 테이블이 하나씩 늘어난다.',
+  },
+  '포털 운영': {
+    color: '#4E9BAA',
+    description:
+      '데이터가 아니라 서비스를 움직이는 테이블들 — 계정·로그인·AI 사용량과 비용.',
+  },
 }
 
 const FALLBACK_COLORS = ['#6B7FD7', '#8A7DBE', '#4E9BAA', '#B0743C']

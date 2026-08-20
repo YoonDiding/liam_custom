@@ -455,6 +455,224 @@ COMMENT ON COLUMN raw.source_document."basis_default" IS 'enum: separate|consoli
 COMMENT ON COLUMN raw.source_document."basis_geo_default" IS 'enum: domestic|domestic_overseas|unknown';
 COMMENT ON COLUMN raw.source_document."file_hash" IS '판본·중복 검출(260818 md5 실측)';
 
+CREATE TABLE ops.users (
+  "id" bigint PRIMARY KEY,
+  "email" text NOT NULL,
+  "display_name" text,
+  "portal_role" varchar NOT NULL,
+  "plan" varchar,
+  "plan_expires_at" timestamptz,
+  "is_active" boolean NOT NULL,
+  "last_login_at" timestamptz,
+  "note" text,
+  "created_at" timestamptz NOT NULL
+);
+COMMENT ON TABLE ops.users IS '[영역:포털 운영] [기존] OPS · Q. 포털에 누가 들어올 수 있나? — 계정 명부. portal_role(권한)과 plan(요금제)·plan_expires_at으로 접근을 통제한다 (스테이징 11명)';
+
+CREATE TABLE ops.portal_login_code (
+  "id" bigint PRIMARY KEY,
+  "email" text NOT NULL,
+  "code" varchar NOT NULL,
+  "expires_at" timestamptz NOT NULL,
+  "used_at" timestamptz,
+  "created_at" timestamptz NOT NULL
+);
+COMMENT ON TABLE ops.portal_login_code IS '[영역:포털 운영] [기존] OPS · Q. 로그인 시도는 어떻게 확인하나? — 이메일로 보낸 1회용 코드와 만료·사용 시각. 비밀번호 없이 코드 로그인';
+
+CREATE TABLE ops.portal_credit_grant (
+  "id" bigint PRIMARY KEY,
+  "account_id" bigint NOT NULL,
+  "amount_usd" numeric NOT NULL,
+  "reason" text NOT NULL,
+  "granted_at" timestamptz NOT NULL,
+  "note" text
+);
+COMMENT ON TABLE ops.portal_credit_grant IS '[영역:포털 운영] [기존] OPS · Q. 이 계정에 크레딧을 언제 왜 줬나? — 지급 1건이 행 1개(사유 필수). 잔액은 지급 합계에서 사용량을 빼서 계산';
+
+CREATE TABLE ops.ai_quota (
+  "account_id" bigint PRIMARY KEY,
+  "token_limit" bigint,
+  "token_bonus" bigint NOT NULL,
+  "reset_period" varchar NOT NULL,
+  "reset_at" timestamptz,
+  "enforce" boolean NOT NULL,
+  "updated_by" text,
+  "updated_at" timestamptz NOT NULL,
+  "note" text
+);
+COMMENT ON TABLE ops.ai_quota IS '[영역:포털 운영] [기존] OPS · Q. 이 계정이 AI를 얼마나 쓸 수 있나? — 토큰 한도·보너스·리셋 주기. enforce가 꺼져 있으면 기록만 하고 막지는 않는다';
+
+CREATE TABLE ops.ai_usage_log (
+  "id" bigint PRIMARY KEY,
+  "ts" timestamptz NOT NULL,
+  "account_id" bigint,
+  "env" text,
+  "query" text,
+  "model" text,
+  "type" text,
+  "steps" integer,
+  "tokens" bigint,
+  "input_tokens" bigint,
+  "output_tokens" bigint,
+  "billed_input_tokens" bigint,
+  "cache_read_tokens" bigint,
+  "cache_write_tokens" bigint,
+  "cost_usd" numeric,
+  "extra" jsonb
+);
+COMMENT ON TABLE ops.ai_usage_log IS '[영역:포털 운영] [기존] OPS · Q. AI 호출 한 번에 무엇을 얼마나 썼나? — 질의·모델·토큰(캐시 읽기/쓰기 구분)·비용(cost_usd)을 호출 단위로 기록. 계정별 사용량 집계의 원천';
+
+CREATE TABLE core.code_master (
+  "id" integer PRIMARY KEY,
+  "code_type" varchar,
+  "code" varchar,
+  "code_name" varchar,
+  "sort_order" integer,
+  "is_active" boolean
+);
+COMMENT ON TABLE core.code_master IS '[영역:사전] [기존] L1 · Q. 시스템 곳곳의 코드값은 무슨 뜻인가? — 코드 유형·코드·이름을 담는 공용 코드표';
+
+CREATE TABLE core.company_synonym (
+  "id" integer PRIMARY KEY,
+  "company_id" integer,
+  "synonym" varchar,
+  "source" varchar
+);
+COMMENT ON TABLE core.company_synonym IS '[영역:사전] [기존] L2 · Q. 이 표기가 어느 회사를 말하나? — 회사명 이표기(옛 사명·약칭·영문 등)를 company_master로 연결. 회사 매칭의 보조 재료';
+
+CREATE TABLE ops.sync_state (
+  "table_name" text PRIMARY KEY,
+  "last_id" bigint,
+  "last_ts" timestamptz,
+  "last_run_at" timestamptz
+);
+COMMENT ON TABLE ops.sync_state IS '[영역:파이프라인] [기존] L0 · Q. MySQL→PG 동기화가 어디까지 왔나? — 테이블별 마지막 동기화 지점(id·시각). 컷오버 전 이중 운영기의 이정표';
+
+CREATE TABLE raw.c_dart_company_info (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_dart_company_info IS '[영역:출처 원본] [기존] L0 · DART 기업개황 원본 (3,957행)';
+
+CREATE TABLE raw.c_env_info_company (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_env_info_company IS '[영역:출처 원본] [기존] L0 · 환경정보공개시스템 기업 단위 원본 (12,331행)';
+
+CREATE TABLE raw.c_env_info_section (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_env_info_section IS '[영역:출처 원본] [기존] L0 · 환경정보공개시스템 섹션 단위 원본 (279,617행)';
+
+CREATE TABLE raw.c_ecosq_product (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_ecosq_product IS '[영역:출처 원본] [기존] L0 · 에코스퀘어 친환경 제품 인증 원본 (11,152행)';
+
+CREATE TABLE raw.c_sanction_detail (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_sanction_detail IS '[영역:출처 원본] [기존] L0 · 제재 처분 상세 원본 (10,627행)';
+
+CREATE TABLE raw.c_consum_recall (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_consum_recall IS '[영역:출처 원본] [기존] L0 · 소비자원 리콜 원본 (8,517행)';
+
+CREATE TABLE raw.c_climate_initiative_membership (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_climate_initiative_membership IS '[영역:출처 원본] [기존] L0 · 기후 이니셔티브 가입 현황 원본 (2,672행)';
+
+CREATE TABLE raw.c_company_report_status (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_company_report_status IS '[영역:출처 원본] [기존] L0 · 보고서 발간 현황 원본 (6,922행)';
+
+CREATE TABLE raw.c_sr_report (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_sr_report IS '[영역:출처 원본] [기존] L0 · SR 적재 경로 테이블 (436행). ⚠️ 로컬 절대경로가 값에 들어 있어 컷오버 때 경로 체계째 재정비 — source_document로 승격 예정';
+
+CREATE TABLE raw.c_sr_e3_climate_risk (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_sr_e3_climate_risk IS '[영역:출처 원본] [기존] L0 · SR에서 추출한 기후리스크(E3) 원본 (370행)';
+
+CREATE TABLE raw.c_exchange_rate (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_exchange_rate IS '[영역:출처 원본] [기존] L0 · 환율 참조표 (48행)';
+
+CREATE TABLE raw.c_ksic_code (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_ksic_code IS '[영역:출처 원본] [기존] L0 · 표준산업분류(KSIC) 코드표 (1,205행)';
+
+CREATE TABLE raw.c_nts_biz_code (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_nts_biz_code IS '[영역:출처 원본] [기존] L0 · 국세청 업종 코드표 (1,782행)';
+
+CREATE TABLE raw.br_board_meeting (
+  "cols" text
+);
+COMMENT ON TABLE raw.br_board_meeting IS '[영역:출처 원본] [기존] L0 · 사업보고서 이사회 개최 내역 원본 (1,780행)';
+
+CREATE TABLE raw.i_ghg_target (
+  "cols" text
+);
+COMMENT ON TABLE raw.i_ghg_target IS '[영역:출처 원본] [기존] L0 · NGMS 온실가스 감축목표 원본 (1,977행)';
+
+CREATE TABLE raw.i_indicator_source (
+  "cols" text
+);
+COMMENT ON TABLE raw.i_indicator_source IS '[영역:출처 원본] [기존] L0 · 구 근거 테이블 스냅샷 (389,885행). evidence의 원형 — 신 구조 정착 후 대체';
+
+CREATE TABLE raw.c_kisa_disclosure (
+  "cols" text
+);
+COMMENT ON TABLE raw.c_kisa_disclosure IS '[영역:출처 원본] [기존] L0 · KISA 정보보호공시 원본. 공시 1건=행 1개, S48 값들의 파생원(행이 있는지로 판단)·doc_ref KISA:{id} 대상';
+
+CREATE TABLE serving.company_profile (
+  "cols" text
+);
+COMMENT ON TABLE serving.company_profile IS '[영역:서빙] [기존] L4 · 회사 프로필 카드 재료 (3,956행) — 대표자·업종 등 표시용 요약';
+
+CREATE TABLE serving.indicator_embedding (
+  "cols" text
+);
+COMMENT ON TABLE serving.indicator_embedding IS '[영역:서빙] [기존] L4 · 지표 설명 임베딩 (124행) — 구어체 질의를 지표로 매칭';
+
+CREATE TABLE serving.news_embedding (
+  "cols" text
+);
+COMMENT ON TABLE serving.news_embedding IS '[영역:서빙] [기존] L4 · 뉴스 임베딩 — 유사 기사 중복 제거·연관도 정렬 재료';
+
+CREATE TABLE serving.sr_chunk_embedding (
+  "cols" text
+);
+COMMENT ON TABLE serving.sr_chunk_embedding IS '[영역:서빙] [기존] L4 · SR 본문 청크 임베딩 (920,162행) — 벡터 탐색으로 근거 후보를 찾는 재료';
+
+CREATE TABLE serving.sr_chunk_voyage (
+  "cols" text
+);
+COMMENT ON TABLE serving.sr_chunk_voyage IS '[영역:서빙] [기존] L4 · SR 청크 임베딩 Voyage 모델판 (920,162행) — 모델 비교·전환용';
+
+CREATE TABLE serving.br_doc_section (
+  "cols" text
+);
+COMMENT ON TABLE serving.br_doc_section IS '[영역:서빙] [기존] L4 · 사업보고서 원문 섹션 (275,716행) — BR 뷰어가 읽는 본문';
+
+CREATE TABLE serving.sanction_summary (
+  "cols" text
+);
+COMMENT ON TABLE serving.sanction_summary IS '[영역:서빙] [기존] L4 · 제재 요약 (1,050행) — 포털 제재 조회 API가 읽는 표';
+
+CREATE TABLE serving.v_esg_news (
+  "cols" text
+);
+COMMENT ON TABLE serving.v_esg_news IS '[영역:서빙] [기존] L4 · ESG 뉴스 서빙 표 (1,579행)';
+
 ALTER TABLE raw.etl_job_log ADD FOREIGN KEY ("job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("crawl_job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("committed_data_id") REFERENCES ops.indicator_data ("id");
@@ -474,3 +692,7 @@ ALTER TABLE ops.evidence ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_da
 ALTER TABLE ops.indicator_data_history ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE ops.data_quality_flag ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE raw.source_document ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE ops.portal_credit_grant ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
+ALTER TABLE ops.ai_quota ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
+ALTER TABLE ops.ai_usage_log ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
+ALTER TABLE core.company_synonym ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
