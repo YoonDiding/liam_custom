@@ -4,7 +4,7 @@ CREATE SCHEMA IF NOT EXISTS ops;
 CREATE SCHEMA IF NOT EXISTS serving;
 
 CREATE TABLE core.indicator_sub (id integer PRIMARY KEY);
-COMMENT ON TABLE core.indicator_sub IS '[영역:사전] DEPRECATED · Q. 구 서브컬럼은 어디로 갔나 — 정체는 indicator_component로·출처는 source_map으로 분해. 이관 기간만 참조 해소용 고스트';
+COMMENT ON TABLE core.indicator_sub IS '[영역:사전] DEPRECATED · Q. 예전 서브컬럼 정의는 어디로 갔나 — 항목 정의는 indicator_component로, 출처 정보는 indicator_source_map으로 나눠 옮김. 이관 기간 동안 참조를 풀기 위해서만 남겨둔 빈 껍데기';
 
 CREATE TABLE raw.etl_job (
   "id" varchar(36) PRIMARY KEY,
@@ -26,7 +26,7 @@ CREATE TABLE raw.etl_job (
   "completed_at" timestamptz,
   "updated_at" timestamptz NOT NULL
 );
-COMMENT ON TABLE raw.etl_job IS '[영역:파이프라인] [신규] L0 · Q. 어떤 작업이 언제 돌았나 — 실행 1회=행 1개. 트리거 스위치로 행 이력을 껐을 때(백필)의 유일한 흔적이라 백필도 잡 단위로 남긴다 (MySQL 802행+리허설 잡)';
+COMMENT ON TABLE raw.etl_job IS '[영역:파이프라인] [신규] L0 · Q. 어떤 작업이 언제 실행됐나? — 실행 1번이 행 1개. 백필처럼 행 단위 이력을 끄고 작업할 때는 이 테이블의 기록이 유일한 흔적이 된다 (MySQL 802행+리허설 작업 기록)';
 COMMENT ON COLUMN raw.etl_job."id" IS 'UUID v4';
 COMMENT ON COLUMN raw.etl_job."job_type" IS 'enum: download|crawl|map|commit|import|sync|csv|verify';
 COMMENT ON COLUMN raw.etl_job."status" IS 'enum: pending|running|completed|failed|cancelled';
@@ -43,7 +43,7 @@ CREATE TABLE raw.etl_job_log (
   "detail" text,
   "created_at" timestamptz NOT NULL
 );
-COMMENT ON TABLE raw.etl_job_log IS '[영역:파이프라인] [신규] L0 · Q. 그 작업이 무슨 말을 남겼나 — 로그 라인(실행 이력 아님·job에 종속, MySQL 198,184행)';
+COMMENT ON TABLE raw.etl_job_log IS '[영역:파이프라인] [신규] L0 · Q. 그 작업이 남긴 로그는? — 로그 한 줄이 행 1개. etl_job에 딸린 상세 기록이고 실행 이력 자체는 아니다 (MySQL 198,184행)';
 COMMENT ON COLUMN raw.etl_job_log."job_id" IS '논리 관계 (FK 미선언)';
 
 CREATE TABLE raw.etl_crawl_raw (
@@ -76,7 +76,7 @@ CREATE TABLE raw.etl_crawl_raw (
   "updated_at" timestamptz NOT NULL,
   "dedup_key" text
 );
-COMMENT ON TABLE raw.etl_crawl_raw IS '[영역:파이프라인] [신규] L0 · Q. 크롤러가 원래 무엇을 가져왔나 — 크롤 원문+스테이징 파이프라인(682,276행). 단순 보관이 아니라 상태를 가진 처리 대기열';
+COMMENT ON TABLE raw.etl_crawl_raw IS '[영역:파이프라인] [신규] L0 · Q. 크롤러가 원래 가져온 내용은? — 크롤 원문 보관 + 처리 대기열. 단순 보관용이 아니라 파싱 상태를 관리하는 테이블이다 (682,276행)';
 COMMENT ON COLUMN raw.etl_crawl_raw."source_type" IS 'L0는 잘게 유지(DART_BR≠DART_CG). 17종';
 COMMENT ON COLUMN raw.etl_crawl_raw."rcept_no" IS 'evidence.doc_ref 소스 (33.9% 보유)';
 COMMENT ON COLUMN raw.etl_crawl_raw."corp_code" IS '보강값 보존, dedup_key 제외';
@@ -102,7 +102,7 @@ CREATE TABLE raw.etl_review_queue (
   "created_at" timestamptz NOT NULL,
   "updated_at" timestamptz NOT NULL
 );
-COMMENT ON TABLE raw.etl_review_queue IS '[영역:파이프라인] [신규] L0 · Q. 사람이 봐야 할 것은 무엇인가 — 검토 대기열. 2,784행 전부 pending=사실상 미사용, 흡수/폐기 미결';
+COMMENT ON TABLE raw.etl_review_queue IS '[영역:파이프라인] [신규] L0 · Q. 사람이 검토해야 할 건은? — 검토 대기열. 다만 2,784행 전부 pending이라 사실상 쓰이지 않았고, 다른 테이블로 흡수할지 폐기할지 미정';
 COMMENT ON COLUMN raw.etl_review_queue."review_status" IS 'enum: pending|approved|rejected|modified';
 
 CREATE TABLE raw.etl_indicator_mapping (
@@ -122,7 +122,7 @@ CREATE TABLE raw.etl_indicator_mapping (
   "created_at" timestamptz NOT NULL,
   "updated_at" timestamptz NOT NULL
 );
-COMMENT ON TABLE raw.etl_indicator_mapping IS '[영역:파이프라인] [신규] L0 · Q. 크롤 결과를 어느 지표로 보내나 — 매핑 규칙 7행, 규칙 컬럼 전부 NULL(rule_param의 원형). 흡수 여부 미결';
+COMMENT ON TABLE raw.etl_indicator_mapping IS '[영역:파이프라인] [신규] L0 · Q. 크롤 결과를 어느 지표로 연결하나? — 매핑 규칙 테이블. 7행뿐이고 규칙 컬럼이 전부 NULL이라(rule_param의 전신 격) 흡수 여부 미정';
 COMMENT ON COLUMN raw.etl_indicator_mapping."value_transform" IS '실사용 0건';
 COMMENT ON COLUMN raw.etl_indicator_mapping."unit_mapping" IS '실사용 0건';
 
@@ -159,7 +159,7 @@ CREATE TABLE core.indicator_master (
   "fy_definition" varchar(30),
   "fy_note" text
 );
-COMMENT ON TABLE core.indicator_master IS '[영역:사전] [확장] L1 · Q. 이 지표는 무엇인가 — 기존 유지+fy_definition(연도 해석: S43=공시연도-1 등). classification_rules·extraction_script는 DEPRECATED(0행)';
+COMMENT ON TABLE core.indicator_master IS '[영역:사전] [확장] L1 · Q. 이 지표는 무엇인가? — 지표 정의. 기존 테이블에 fy_definition(연도를 어떻게 해석할지: S43은 공시연도-1 등)만 추가. classification_rules·extraction_script는 안 쓰기로 함(0행)';
 COMMENT ON COLUMN core.indicator_master."classification_rules" IS '[DEPRECATED] 0행. core.rule_param으로 대체 (축 15)';
 COMMENT ON COLUMN core.indicator_master."extraction_script" IS '[DEPRECATED] 0행. 코드를 문자열로 넣으려던 시도';
 COMMENT ON COLUMN core.indicator_master."portal_display" IS 'enum: collapsed|expanded';
@@ -183,7 +183,7 @@ CREATE TABLE core.indicator_component (
   "created_at" timestamptz,
   UNIQUE ("indicator_code", "component_code", "valid_from")
 );
-COMMENT ON TABLE core.indicator_component IS '[영역:사전] [신규] L1 · Q. 이 항목의 정체는 — 출처를 모른다. role 6종(aggregate/component/derived/asreported/flag/attribute)+parent_code(어느 합계의 부품인가)+SCD Type 2(정의 변경=valid_to 닫고 새 행). 구 sub 494행→460개';
+COMMENT ON TABLE core.indicator_component IS '[영역:사전] [신규] L1 · Q. 이 항목은 무엇을 재는가? — 항목의 정의만 담고 출처 정보는 담지 않는다. role 6종(aggregate/component/derived/asreported/flag/attribute), parent_code(어느 합계의 부분인지), 정의가 바뀌면 기존 행을 수정하지 않고 valid_to를 닫고 새 행을 만든다(SCD Type 2). 구 sub 494행이 460개로 정리됨';
 COMMENT ON COLUMN core.indicator_component."role" IS 'enum: aggregate|component|derived|asreported|flag|attribute · attribute=측정값 아닌 레코드 필드(date·cause 등)';
 COMMENT ON COLUMN core.indicator_component."parent_code" IS '어느 합계에 속하나 (E7 airtotal←nox·sox·pm). NULL 통일, '''' 금지';
 COMMENT ON COLUMN core.indicator_component."valid_from" IS '축 16. 개념이 유효한 시점 (수집 시점 아님)';
@@ -201,7 +201,7 @@ CREATE TABLE core.indicator_source_map (
   "note" text,
   UNIQUE ("component_id", "source_code")
 );
-COMMENT ON TABLE core.indicator_source_map IS '[영역:사전] [신규] L2 · Q. 어느 출처가 이 항목을 어떻게 부르나 — source_label(출처별 이름, 라벨오류 흡수)·source_unit(단위 정규화 입력). 행의 유무 자체가 ''그 출처가 제공함''';
+COMMENT ON TABLE core.indicator_source_map IS '[영역:사전] [신규] L2 · Q. 이 항목을 어느 출처가 주고, 거기서는 뭐라고 부르나? — source_label(출처마다 다른 이름을 기록해 이름 차이를 흡수), source_unit(단위 변환의 입력값). 여기에 행이 있으면 그 출처가 이 항목을 제공한다는 뜻';
 COMMENT ON COLUMN core.indicator_source_map."source_label" IS '그 출처에서의 이름 (라벨오류 흡수)';
 COMMENT ON COLUMN core.indicator_source_map."source_unit" IS '축 5 정규화 입력';
 
@@ -234,7 +234,7 @@ CREATE TABLE core.company_master (
   "portal_visible" boolean,
   "has_consolidation" boolean
 );
-COMMENT ON TABLE core.company_master IS '[영역:사전] [확장] L2 · Q. 이 회사는 누구인가 — 기존+has_consolidation(연결 대상 보유 여부). NULL=모름≠false — 없는 것과 모르는 것을 구분';
+COMMENT ON TABLE core.company_master IS '[영역:사전] [확장] L2 · Q. 이 회사는 누구인가? — 회사 명부. has_consolidation(연결 대상 자회사가 있는지)을 추가했고, NULL은 ''아직 모름''이라는 뜻이라 false로 채우지 않는다';
 COMMENT ON COLUMN core.company_master."has_consolidation" IS '[신설] · 축 2. 연결 대상 법인 보유 여부. NULL=미확인 — false로 채우지 않는다';
 
 CREATE TABLE core.corporate_action (
@@ -246,7 +246,7 @@ CREATE TABLE core.corporate_action (
   "note" text,
   "created_at" timestamptz
 );
-COMMENT ON TABLE core.corporate_action IS '[영역:사전] [신규] L2 · Q. 어제의 그 회사와 오늘의 이 회사가 같은 법인인가 — 분할·합병·개명·지주전환 계보. 동국 3사·한화비전·스팩합병 수기 시딩';
+COMMENT ON TABLE core.corporate_action IS '[영역:사전] [신규] L2 · Q. 이 회사가 예전의 그 회사와 같은 법인인가? — 분할·합병·사명변경·지주사 전환 이력. 동국 3사·한화비전·스팩합병을 수기로 넣는 것부터 시작';
 COMMENT ON COLUMN core.corporate_action."action_type" IS 'enum: split|merge|rename|holding_conversion';
 
 CREATE TABLE core.indicator_derivation (
@@ -260,7 +260,7 @@ CREATE TABLE core.indicator_derivation (
   "unit_rule" varchar(60),
   "note" text
 );
-COMMENT ON TABLE core.indicator_derivation IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 파생 지표는 뭘로 계산하나 — 분자·분모 지정, same_basis면 basis 불일치 시 계산 거부(포스코 0.978 재발 차단)';
+COMMENT ON TABLE core.indicator_derivation IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 파생 지표는 무엇으로 계산하나? — 분자·분모 지표를 지정. same_basis로 설정하면 분자와 분모의 연결/별도 기준이 다를 때 계산을 거부한다(포스코 0.978 같은 잘못된 비율 재발 방지)';
 COMMENT ON COLUMN core.indicator_derivation."basis_constraint" IS 'enum: same_basis|any · same_basis면 분자·분모 basis 불일치 시 계산 거부';
 COMMENT ON COLUMN core.indicator_derivation."formula" IS 'enum: divide|ratio|weighted_avg';
 
@@ -276,7 +276,7 @@ CREATE TABLE core.rule_param (
   "valid_to" date,
   UNIQUE ("indicator_code", "source_code", "rule_key")
 );
-COMMENT ON TABLE core.rule_param IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 파싱·검증 판정의 재료는 — 2축(지표×출처) 해상도 4단, 알고리즘은 코드에·여기엔 파라미터만. SCD+기간겹침 EXCLUDE로 재현성 보장(UPDATE 금지), 값의 rule_applied가 ''{id}:{rule_key}''로 행을 직접 참조';
+COMMENT ON TABLE core.rule_param IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 파싱·검증에 쓰는 판정 기준값은? — 알고리즘은 코드에 두고 여기엔 숫자·목록 같은 재료만 담는다. 지표별·출처별로 세분화 가능(4단계 우선순위). 기준이 바뀌면 행을 수정하지 않고 새 행을 만들며, 기간이 겹치면 DB가 등록을 거부한다. 값 쪽에서 rule_applied=''{id}:{rule_key}''로 어떤 규칙을 썼는지 기록';
 COMMENT ON COLUMN core.rule_param."indicator_code" IS 'NULL=전역 기본값';
 COMMENT ON COLUMN core.rule_param."source_code" IS 'NULL=출처 무관';
 COMMENT ON COLUMN core.rule_param."rule_key" IS '현재 4값: total_row·unit_scale·missing_policy·row_filter. CHECK 없음(의도) · 동일 스코프 유효기간 겹침 금지(EXCLUDE gist)';
@@ -290,7 +290,7 @@ CREATE TABLE core.canonical_rule (
   "tie_breaker" varchar(30),
   "note" text
 );
-COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 여러 값 중 무엇이 대표인가 — basis_preference가 source_order보다 앞. 코드 3벌→표 1벌, 구 indicator_source_config(161행) 흡수→포털 7곳 동반 수정';
+COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 같은 항목에 값이 여러 개면 무엇을 대표로 보여주나? — 대표값 선택 규칙. 연결/별도 우선순위(basis_preference)를 먼저 보고 그다음 출처 우선순위(source_order)를 본다. 코드에 3벌로 흩어져 있던 로직을 표 하나로 통합, 구 indicator_source_config(161행)를 흡수';
 COMMENT ON COLUMN core.canonical_rule."basis_preference" IS '1순위 축';
 COMMENT ON COLUMN core.canonical_rule."source_order" IS '2순위 타이브레이크';
 COMMENT ON COLUMN core.canonical_rule."tie_breaker" IS 'enum: latest_collected|highest_status|manual';
@@ -324,7 +324,7 @@ CREATE TABLE ops.indicator_data (
   "confirmed_by" varchar(60),
   "rule_applied" varchar(60)[]
 );
-COMMENT ON TABLE ops.indicator_data IS '[영역:파이프라인] [확장] L3 · Q. 확정된 값은 얼마인가 — 값 정본. 업무키 6원소(회사·지표·component·연도·출처·basis)+같은 행에 value_raw/value_num. UNIQUE 제약은 Phase C';
+COMMENT ON TABLE ops.indicator_data IS '[영역:파이프라인] [확장] L3 · Q. 확정된 값은 얼마인가? — 값의 정본 테이블. 행 하나를 회사·지표·component·연도·출처·basis 6가지로 식별하고, 보고된 원래 값(value_raw)과 정규화된 숫자(value_num)를 같은 행에 둔다. UNIQUE 제약은 Phase C에서 걸 예정';
 COMMENT ON COLUMN ops.indicator_data."sub_id" IS '[DEPRECATED] component_id로 대체. 이관 기간 보존(롤백 경로) 후 DROP';
 COMMENT ON COLUMN ops.indicator_data."value_raw" IS '🔒 원공시값 — 수정 API가 인자로 받지 않는다';
 COMMENT ON COLUMN ops.indicator_data."value_num" IS '✏️ 사람이 고칠 때 바뀌는 유일한 값 컬럼';
@@ -353,7 +353,7 @@ CREATE TABLE ops.evidence (
   "doc_page" integer,
   "etl_log" text
 );
-COMMENT ON TABLE ops.evidence IS '[영역:파이프라인] [개명+확장] L2 · Q. 그 값을 어디서 봤나 — 근거 전용(구 indicator_source 개명). doc_ref 이원 규약: DART=rcept_no/문서=SRDOC:{id}/KISA:{id}. 현재 값의 56.1%에 대응 행 없음=커버리지를 지표로 관리';
+COMMENT ON TABLE ops.evidence IS '[영역:파이프라인] [개명+확장] L2 · Q. 그 값을 어디에서 봤나? — 근거 전용 테이블(구 indicator_source를 개명). doc_ref 표기법: DART 문서는 rcept_no, 지속가능경영보고서는 SRDOC:{id}, KISA 공시는 KISA:{id}. 현재 값의 56.1%는 근거 행이 없는데, 이 비율 자체를 관리 지표로 삼는다';
 COMMENT ON COLUMN ops.evidence."data_id" IS 'ON DELETE CASCADE (축 12 — 고아 행 금지). ⚠️260813 적용 후 구 fk_src_data(무CASCADE)와 2중 — 구 FK DROP 권고';
 COMMENT ON COLUMN ops.evidence."source_code" IS '[DEPRECATED] ops.indicator_data.source_code로 승격';
 COMMENT ON COLUMN ops.evidence."note" IS '축 4. 사람이 남긴 메모만 — 로그는 etl_log, 출처는 doc_ref';
@@ -371,7 +371,7 @@ CREATE TABLE ops.indicator_data_history (
   "old_value" jsonb,
   "new_value" jsonb
 );
-COMMENT ON TABLE ops.indicator_data_history IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 값이 언제 왜 바뀌었나 — 트리거가 7컬럼 감시(백필은 세션 스위치로 제외·잡 기록이 대신). absorb는 reason=사람용·new_value.absorbed_into=기계용. 🔴소급 불가—이관보다 먼저 걸어야 이관이 기록에 남는다. data_id FK 없음(의도—원본 삭제돼도 존속)';
+COMMENT ON TABLE ops.indicator_data_history IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 값이 언제, 왜 바뀌었나? — 트리거가 7개 컬럼의 변경을 자동 기록. 백필 때는 세션 스위치로 끄고 대신 etl_job에 남긴다. absorb 작업은 reason(사람이 읽는 설명)과 new_value.absorbed_into(기계가 따라가는 링크)를 함께 기록. 과거로 소급해서 만들 수 없으므로 이관보다 먼저 걸어야 이관 자체가 기록에 남는다. data_id에 FK를 안 건 것은 의도 — 원본 행이 삭제돼도 이력은 남긴다';
 COMMENT ON COLUMN ops.indicator_data_history."data_id" IS '논리 관계 (FK 미선언 — 의도)';
 COMMENT ON COLUMN ops.indicator_data_history."change_type" IS 'enum: insert|update|correct|delete|reassign · reassign=회사 귀속 변경 — 삭제+삽입을 한 이력 행에 묶는다';
 COMMENT ON COLUMN ops.indicator_data_history."reason" IS '일회성 수정인지 규칙 문제인지 구별하는 유일한 단서. N번 반복되면 rule_param으로 승격';
@@ -388,7 +388,7 @@ CREATE TABLE ops.data_quality_flag (
   "resolved_by" varchar(60),
   "resolution" varchar(30)
 );
-COMMENT ON TABLE ops.data_quality_flag IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 의심스러운데 원문대로 적은 것은 — 판단을 값에 섞지 않고 옆에 둔다. 미해소 플래그 조회=검수 큐, 재수집이 지우지 않는다';
+COMMENT ON TABLE ops.data_quality_flag IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 의심스럽지만 원문대로 적은 값은? — 값 자체는 원문대로 두고, 의심된다는 표시를 옆 테이블에 따로 기록. 해소 안 된 플래그 목록이 곧 검수 대기 목록이고, 재수집해도 플래그는 자동으로 지워지지 않는다';
 COMMENT ON COLUMN ops.data_quality_flag."data_id" IS 'ON DELETE CASCADE';
 COMMENT ON COLUMN ops.data_quality_flag."rule" IS 'enum: unit_suspect|multi_source_divergence|carry_forward|similar_name_match|outlier|manual_override_stale';
 COMMENT ON COLUMN ops.data_quality_flag."severity" IS 'enum: info|warn|block';
@@ -416,12 +416,12 @@ CREATE TABLE serving.v_fact (
   "doc_ref" varchar(100),
   "doc_page" integer
 );
-COMMENT ON TABLE serving.v_fact IS '[영역:서빙] [VIEW] [신규] L4 · Q. 지금 서빙할 사실은 무엇인가 — 의미축 6원소+메타. indicator_data ⋈ component ⋈ master ⟕ evidence, 단위는 COALESCE(행>component>master)';
+COMMENT ON TABLE serving.v_fact IS '[영역:서빙] [VIEW] [신규] L4 · Q. 지금 서빙 가능한 사실 목록은? — 값·항목·지표·근거를 조인해 6가지 식별자와 메타 정보를 한 줄로 제공하는 뷰. 단위는 값 행 → component → master 순서로 채운다';
 
 CREATE TABLE serving.v_fact_canonical (
   "cols" text
 );
-COMMENT ON TABLE serving.v_fact_canonical IS '[영역:서빙] [VIEW] [예정] L4 · Q. 회사·지표당 대표값 하나만 달라면 — canonical_rule을 풀어 출처는 접고 기준(basis)은 편다. 뷰로는 규모를 못 버텨 matview+적재 후 리프레시, 응답에 as_of 필수. DDL은 골격만';
+COMMENT ON TABLE serving.v_fact_canonical IS '[영역:서빙] [VIEW] [예정] L4 · Q. 회사·지표당 대표값 하나만 필요하면? — canonical_rule에 따라 여러 출처 중 하나를 골라 대표값으로 만든다. 연결/별도는 합치지 않고 각각 따로 제공. 일반 뷰로는 조회량을 감당 못해 구체화 뷰로 만들고 적재 후 리프레시하며, 응답에 갱신 시점(as_of)을 반드시 붙인다. 아직 골격만 있음';
 
 CREATE TABLE raw.source_document (
   "id" bigint PRIMARY KEY,
@@ -445,7 +445,7 @@ CREATE TABLE raw.source_document (
   "created_at" timestamptz NOT NULL,
   "updated_at" timestamptz NOT NULL
 );
-COMMENT ON TABLE raw.source_document IS '[영역:파이프라인] [신규] L0 · Q. 그 문서는 어떤 판인가 — 보고서 한 부=행 하나(불변, 새 판=새 행). evidence.doc_ref의 SRDOC:{id} 대상. 다판본 허용, file_hash는 물리 중복만 검출(260818 SR 전수조사가 근거)';
+COMMENT ON TABLE raw.source_document IS '[영역:파이프라인] [신규] L0 · Q. 이 문서는 어떤 판본인가? — 보고서 한 부가 행 하나. 행은 수정하지 않고 새 판본이 나오면 새 행을 만든다. evidence.doc_ref가 SRDOC:{id} 형식으로 가리키는 대상. 같은 파일을 두 번 등록하는 실수만 file_hash로 잡는다';
 COMMENT ON COLUMN raw.source_document."source_type" IS 'SR·FACTBOOK… L0는 잘게(축 18)';
 COMMENT ON COLUMN raw.source_document."doc_type" IS 'enum: SR|FACTBOOK|DATABOOK|CLIMATE_REPORT|VALUE_UP|OTHER · VALUE_UP 명시 = 밸류업 오분류 10부 실측이 근거';
 COMMENT ON COLUMN raw.source_document."company_raw" IS '원문 회사 표기(보강 전) — L0 원칙';
@@ -474,7 +474,7 @@ CREATE TABLE raw.c_kisa_disclosure (
   "created_at" timestamptz NOT NULL,
   UNIQUE ("company_raw", "publish_year")
 );
-COMMENT ON TABLE raw.c_kisa_disclosure IS '[영역:파이프라인] [신규] L0 · Q. KISA 공시 원문은 무엇이었나 — 공시 1건=행 1개(불변·와이드). S48 값들의 파생원이자 doc_ref KISA:{id} 대상. 행의 유무가 구 sub exists_yn을 대체';
+COMMENT ON TABLE raw.c_kisa_disclosure IS '[영역:파이프라인] [신규] L0 · Q. KISA 정보보호공시 원문은? — 공시 1건이 행 1개(수정 안 함). S48 지표 값들이 이 테이블에서 파생되고, doc_ref는 KISA:{id} 형식. 예전 sub의 exists_yn은 별도 값 없이 여기에 행이 있는지로 판단한다';
 COMMENT ON COLUMN raw.c_kisa_disclosure."publish_year" IS '공시연도. fiscal_year=publish_year-1(어댑터 규칙)';
 COMMENT ON COLUMN raw.c_kisa_disclosure."company_raw" IS 'KISA 표기 원문(보강 전)';
 COMMENT ON COLUMN raw.c_kisa_disclosure."invest_amount" IS '정보보호부문 투자액 — 원문 수치';
