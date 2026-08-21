@@ -443,9 +443,11 @@ CREATE TABLE raw.source_document (
   "file_hash" varchar(64) UNIQUE,
   "note" text,
   "created_at" timestamptz NOT NULL,
-  "updated_at" timestamptz NOT NULL
+  "updated_at" timestamptz NOT NULL,
+  "s3_key" text UNIQUE,
+  "supersedes_id" bigint
 );
-COMMENT ON TABLE raw.source_document IS '[영역:파이프라인] [신규] L0 · Q. 이 문서는 어떤 판본인가? — 보고서 한 부가 행 하나. 행은 수정하지 않고 새 판본이 나오면 새 행을 만든다. evidence.doc_ref가 SRDOC:{id} 형식으로 가리키는 대상. 같은 파일을 두 번 등록하는 실수만 file_hash로 잡는다';
+COMMENT ON TABLE raw.source_document IS '[영역:파이프라인] [신규] L0 · Q. 이 문서는 어떤 판본인가? — 보고서 한 부가 행 하나. 행은 수정하지 않고 새 판본이 나오면 새 행을 만든다. evidence.doc_ref가 SRDOC:{id} 형식으로 가리키는 대상. 같은 파일을 두 번 등록하는 실수만 file_hash로 잡는다. V8: 원본은 S3 단일 정본(s3_key)으로 관리, 판본 교체는 supersedes_id 사슬';
 COMMENT ON COLUMN raw.source_document."source_type" IS 'SR·FACTBOOK… L0는 잘게(축 18)';
 COMMENT ON COLUMN raw.source_document."doc_type" IS 'enum: SR|FACTBOOK|DATABOOK|CLIMATE_REPORT|VALUE_UP|OTHER · VALUE_UP 명시 = 밸류업 오분류 10부 실측이 근거';
 COMMENT ON COLUMN raw.source_document."company_raw" IS '원문 회사 표기(보강 전) — L0 원칙';
@@ -454,6 +456,8 @@ COMMENT ON COLUMN raw.source_document."report_scope_raw" IS '보고범위 원문
 COMMENT ON COLUMN raw.source_document."basis_default" IS 'enum: separate|consolidated|group_sum|site|unknown';
 COMMENT ON COLUMN raw.source_document."basis_geo_default" IS 'enum: domestic|domestic_overseas|unknown';
 COMMENT ON COLUMN raw.source_document."file_hash" IS '판본·중복 검출(260818 md5 실측)';
+COMMENT ON COLUMN raw.source_document."s3_key" IS '[신설] · S3 정본 위치(V8) — sr-reports/{연도}/{코드}_{언어}_{md5앞8}.pdf. 키에 내용 해시가 들어가 덮어쓰기 불가';
+COMMENT ON COLUMN raw.source_document."supersedes_id" IS '[신설] · 이 행이 대체한 구 판본(V8) — 파일 교체는 덮어쓰기가 아니라 새 행+이 링크';
 
 CREATE TABLE ops.users (
   "id" bigint PRIMARY KEY,
@@ -673,6 +677,22 @@ CREATE TABLE serving.v_esg_news (
 );
 COMMENT ON TABLE serving.v_esg_news IS '[영역:서빙] [기존] L4 · ESG 뉴스 서빙 표 (1,579행)';
 
+CREATE TABLE raw.source_document_company (
+  "id" bigint PRIMARY KEY,
+  "srdoc_id" bigint NOT NULL,
+  "company_id" integer NOT NULL,
+  "relation" varchar(20) NOT NULL,
+  "source" varchar(20) NOT NULL,
+  "note" text,
+  "created_at" timestamptz,
+  UNIQUE ("srdoc_id", "company_id")
+);
+COMMENT ON TABLE raw.source_document_company IS '[영역:파이프라인] [신규] L0 · Q. 이 문서가 어느 회사들을 다루나? — 지주사 연결보고서(무림그룹→무림페이퍼 등)처럼 한 문서가 여러 회사를 담는 경우의 매핑(V10). 발행 주체는 issuer 1행, 보고범위에 포함된 회사는 covered 행. AI 보고범위 추출이 채우고 사람이 정정한다(source 컬럼으로 구분). 행의 존재가 사실';
+COMMENT ON COLUMN raw.source_document_company."srdoc_id" IS '문서 (삭제 시 함께 삭제)';
+COMMENT ON COLUMN raw.source_document_company."relation" IS 'enum: issuer|covered · issuer=발행 주체(업로드 시 자동) / covered=보고범위 포함';
+COMMENT ON COLUMN raw.source_document_company."source" IS 'enum: issuer_auto|ai|manual · 채움 주체 — AI가 메인, 사람이 보조';
+COMMENT ON COLUMN raw.source_document_company."note" IS '원문 근거 (예: 연결대상 종속회사 명시 p.3)';
+
 ALTER TABLE raw.etl_job_log ADD FOREIGN KEY ("job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("crawl_job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("committed_data_id") REFERENCES ops.indicator_data ("id");
@@ -692,7 +712,10 @@ ALTER TABLE ops.evidence ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_da
 ALTER TABLE ops.indicator_data_history ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE ops.data_quality_flag ADD FOREIGN KEY ("data_id") REFERENCES ops.indicator_data ("id");
 ALTER TABLE raw.source_document ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE raw.source_document ADD FOREIGN KEY ("supersedes_id") REFERENCES raw.source_document ("id");
 ALTER TABLE ops.portal_credit_grant ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
 ALTER TABLE ops.ai_quota ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
 ALTER TABLE ops.ai_usage_log ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
 ALTER TABLE core.company_synonym ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE raw.source_document_company ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
+ALTER TABLE raw.source_document_company ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
