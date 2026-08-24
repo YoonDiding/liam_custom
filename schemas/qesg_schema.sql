@@ -427,6 +427,7 @@ CREATE TABLE raw.source_document (
   "id" bigint PRIMARY KEY,
   "source_type" varchar(30) NOT NULL,
   "doc_type" varchar(30) NOT NULL,
+  "doc_subtype" varchar(50),
   "company_id" integer,
   "company_raw" varchar(200),
   "fiscal_year" varchar(4) NOT NULL,
@@ -449,14 +450,15 @@ CREATE TABLE raw.source_document (
 );
 COMMENT ON TABLE raw.source_document IS '[영역:파이프라인] [신규] L0 · Q. 이 문서는 어떤 판본인가? — 보고서 한 부가 행 하나. 행은 수정하지 않고 새 판본이 나오면 새 행을 만든다. evidence.doc_ref가 SRDOC:{id} 형식으로 가리키는 대상. 같은 파일을 두 번 등록하는 실수만 file_hash로 잡는다. V8: 원본은 S3 단일 정본(s3_key)으로 관리, 판본 교체는 supersedes_id 사슬';
 COMMENT ON COLUMN raw.source_document."source_type" IS 'SR·FACTBOOK… L0는 잘게(축 18)';
-COMMENT ON COLUMN raw.source_document."doc_type" IS 'enum: SR|FACTBOOK|DATABOOK|CLIMATE_REPORT|VALUE_UP|OTHER · VALUE_UP 명시 = 밸류업 오분류 10부 실측이 근거';
+COMMENT ON COLUMN raw.source_document."doc_type" IS 'enum: SR|FACTBOOK|DATABOOK|CLIMATE_REPORT|VALUE_UP|OTHER · 3어휘 SR·DATABOOK·OTHER(V15) — 처리 경로가 갈리는 만큼만 잘게. 상세 유형은 doc_subtype. 컬럼화 근거=밸류업 10부 SR 위장 실측(260818)';
+COMMENT ON COLUMN raw.source_document."doc_subtype" IS '[신설] · 상세 유형 자유 라벨(V15 — 기후보고서·TCFD 등, CHECK 없음). 특징 서술은 note에, 이 칸은 짧은 라벨만. 처리 경로가 갈라지면 doc_type으로 승격';
 COMMENT ON COLUMN raw.source_document."company_raw" IS '원문 회사 표기(보강 전) — L0 원칙';
 COMMENT ON COLUMN raw.source_document."fiscal_year" IS '대상 회계연도 — 발간연도 아님(''2025 Report'' 25부가 FY2024)';
 COMMENT ON COLUMN raw.source_document."report_scope_raw" IS '보고범위 원문. 값의 범위 정본은 값 행(basis_*) — 이건 폴백. 사다리: 셀 주석>문서 기본>출처 기본표>unknown';
 COMMENT ON COLUMN raw.source_document."basis_default" IS 'enum: separate|consolidated|group_sum|site|unknown';
 COMMENT ON COLUMN raw.source_document."basis_geo_default" IS 'enum: domestic|domestic_overseas|unknown';
 COMMENT ON COLUMN raw.source_document."file_hash" IS '판본·중복 검출(260818 md5 실측)';
-COMMENT ON COLUMN raw.source_document."s3_key" IS '[신설] · S3 정본 위치(V8) — sr-reports/{연도}/{코드}_{언어}_{md5앞8}.pdf. 키에 내용 해시가 들어가 덮어쓰기 불가';
+COMMENT ON COLUMN raw.source_document."s3_key" IS '[신설] · S3 정본 위치(V8) — sr-reports/{연도}/{코드}_{doc_type}_{언어}_{md5앞8}.{확장자}. V15부터 유형 포함·PDF/XLSX 허용, 구 등록분 키는 유지';
 COMMENT ON COLUMN raw.source_document."supersedes_id" IS '[신설] · 이 행이 대체한 구 판본(V8) — 파일 교체는 덮어쓰기가 아니라 새 행+이 링크';
 
 CREATE TABLE ops.users (
@@ -693,6 +695,44 @@ COMMENT ON COLUMN raw.source_document_company."relation" IS 'enum: issuer|covere
 COMMENT ON COLUMN raw.source_document_company."source" IS 'enum: issuer_auto|ai|manual · 채움 주체 — AI가 메인, 사람이 보조';
 COMMENT ON COLUMN raw.source_document_company."note" IS '원문 근거 (예: 연결대상 종속회사 명시 p.3)';
 
+CREATE TABLE ops.verification_run (
+  "id" bigint PRIMARY KEY,
+  "data_id" bigint NOT NULL,
+  "method" varchar(20) NOT NULL,
+  "verdict" varchar(12) NOT NULL,
+  "detail" jsonb,
+  "verifier" varchar(80),
+  "run_at" timestamptz NOT NULL
+);
+COMMENT ON TABLE ops.verification_run IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 이 값을 누가 언제 어떻게 검증했나? — 검증 시행 1건이 행 1개(V13). 통과도 기록해 레거시 verified 0/1의 통과 근거 증발을 해소한다. 이 표는 사건 기록이고, 현재 상태는 indicator_data.status가, 미해소 문제는 data_quality_flag가 맡는다. method는 원문 대조 비용 사다리(text_recheck→ai_snippet→ai_embedding)+rule+human';
+COMMENT ON COLUMN ops.verification_run."data_id" IS 'ops.indicator_data.id — FK 미선언(의도): 값이 폐기·교체돼도 검증 이력은 존속';
+COMMENT ON COLUMN ops.verification_run."method" IS 'enum: rule|text_recheck|ai_snippet|ai_embedding|human';
+COMMENT ON COLUMN ops.verification_run."verdict" IS 'enum: pass|fail|uncertain';
+COMMENT ON COLUMN ops.verification_run."detail" IS '근거 통째 — 규칙={rule_applied, 편차} / AI={model, 원문 위치, 응답 요지, confidence, cost}';
+COMMENT ON COLUMN ops.verification_run."verifier" IS '러너 이름 또는 사람';
+
+CREATE TABLE serving.srdoc_chunk (
+  "id" bigint PRIMARY KEY,
+  "srdoc_id" bigint NOT NULL,
+  "page" integer NOT NULL,
+  "chunk_idx" integer NOT NULL,
+  "text" text NOT NULL,
+  "vec" vector(384),
+  "model" varchar(80) NOT NULL,
+  "created_at" timestamptz NOT NULL,
+  UNIQUE ("srdoc_id", "page", "chunk_idx", "model")
+);
+COMMENT ON TABLE serving.srdoc_chunk IS '[영역:서빙] [신규] L4 · Q. 문서의 어느 페이지에 무슨 내용이 있나? — SR 청크·임베딩(V14). srdoc_id 키라서 임베딩의 수명주기가 문서 행을 따라간다(ON DELETE CASCADE). 페이지 벡터·키워드 탐색의 재료이고, 텍스트 모드 추출은 이 텍스트를 그대로 읽는다. 파일명 키였던 구 sr_chunk_embedding의 후속';
+COMMENT ON COLUMN serving.srdoc_chunk."srdoc_id" IS 'ON DELETE CASCADE — 문서 행이 지워지면 청크도 함께';
+COMMENT ON COLUMN serving.srdoc_chunk."chunk_idx" IS '페이지 내 순번';
+COMMENT ON COLUMN serving.srdoc_chunk."vec" IS 'pgvector — MiniLM 384차원';
+COMMENT ON COLUMN serving.srdoc_chunk."model" IS '임베딩 모델 — 교체 실험 구분';
+
+CREATE TABLE serving.v_fact_core (
+  "cols" text
+);
+COMMENT ON TABLE serving.v_fact_core IS '[영역:서빙] [VIEW] [신규] L4 · Q. 신 체계의 서빙 계약은? — 업무키 6원소+값 4종+내력을 한 줄로 주는 뷰(V12). status 게이트 내장(parsed는 노출되지 않음), evidence의 doc_ref·doc_page 탑재, component는 LEFT 조인(이월 3,230행 보존). 회사 메타는 싣지 않는다 — 소비자가 company_master를 직접 조인. 구 v_fact 교체(D-3) 전까지 병행 운영';
+
 ALTER TABLE raw.etl_job_log ADD FOREIGN KEY ("job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("crawl_job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("committed_data_id") REFERENCES ops.indicator_data ("id");
@@ -719,3 +759,4 @@ ALTER TABLE ops.ai_usage_log ADD FOREIGN KEY ("account_id") REFERENCES ops.users
 ALTER TABLE core.company_synonym ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
 ALTER TABLE raw.source_document_company ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
 ALTER TABLE raw.source_document_company ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE serving.srdoc_chunk ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
