@@ -74,9 +74,13 @@ CREATE TABLE raw.etl_crawl_raw (
   "verify_reason" text,
   "created_at" timestamptz NOT NULL,
   "updated_at" timestamptz NOT NULL,
-  "dedup_key" text
+  "dedup_key" text,
+  "srdoc_id" bigint,
+  "doc_page" integer,
+  "component_code" varchar(60),
+  "basis" varchar(20)
 );
-COMMENT ON TABLE raw.etl_crawl_raw IS '[영역:파이프라인] [신규] L0 · Q. 크롤러가 원래 가져온 내용은? — 크롤 원문 보관 + 처리 대기열. 단순 보관용이 아니라 파싱 상태를 관리하는 테이블이다 (682,276행)';
+COMMENT ON TABLE raw.etl_crawl_raw IS '[영역:파이프라인] [신규] L0 · Q. 크롤러가 원래 가져온 내용은? — 크롤 원문 보관 + 처리 대기열. 단순 보관용이 아니라 파싱 상태를 관리하는 테이블이다 (682,556행 — 스테이징 15432 기준)';
 COMMENT ON COLUMN raw.etl_crawl_raw."source_type" IS 'L0는 잘게 유지(DART_BR≠DART_CG). 17종';
 COMMENT ON COLUMN raw.etl_crawl_raw."rcept_no" IS 'evidence.doc_ref 소스 (33.9% 보유)';
 COMMENT ON COLUMN raw.etl_crawl_raw."corp_code" IS '보강값 보존, dedup_key 제외';
@@ -87,6 +91,10 @@ COMMENT ON COLUMN raw.etl_crawl_raw."status" IS 'enum: pending|mapped|committed|
 COMMENT ON COLUMN raw.etl_crawl_raw."committed_data_id" IS '값↔원문 링크 (96.0% 보유). FK는 Phase C';
 COMMENT ON COLUMN raw.etl_crawl_raw."verified" IS '축 10 재료. 현재 75% 미검증';
 COMMENT ON COLUMN raw.etl_crawl_raw."dedup_key" IS 'GENERATED: company_raw || ''|'' || indicator_code || ''|'' || regexp_replace(coalesce(raw_label · 신 5원소 (구 9원소에서 회사 4칸→company_raw 1칸). concat_ws는 STABLE이라 || 동치 구현. UNIQUE는 Phase C — 지금 걸면 기존 31,807행 충돌';
+COMMENT ON COLUMN raw.etl_crawl_raw."srdoc_id" IS '[신설] · SR→PG 직행 경로 — 이 관측이 어느 문서에서 나왔는지(source_document 판본사슬 참조)';
+COMMENT ON COLUMN raw.etl_crawl_raw."doc_page" IS '[신설] · 문서 안 페이지 위치 — Vision 추출 근거';
+COMMENT ON COLUMN raw.etl_crawl_raw."component_code" IS '[신설] · 문서 주도 추출이 판정한 component 후보 — 조립 단계 재료. 지표미정 관측은 indicator_code와 함께 NULL일 수 있다';
+COMMENT ON COLUMN raw.etl_crawl_raw."basis" IS '[신설] · 원문이 밝힌 경계(연결/별도 등) — basis 채움 사다리의 1순위 재료';
 
 CREATE TABLE raw.etl_review_queue (
   "id" bigint PRIMARY KEY,
@@ -284,16 +292,21 @@ COMMENT ON COLUMN core.rule_param."valid_from" IS '[신설] · 260819 신설 —
 COMMENT ON COLUMN core.rule_param."valid_to" IS '[신설]';
 
 CREATE TABLE core.canonical_rule (
-  "indicator_code" varchar(20) PRIMARY KEY,
+  "id" bigint PRIMARY KEY,
+  "indicator_code" varchar(20) UNIQUE,
   "basis_preference" varchar(20)[],
   "source_order" varchar(40)[],
+  "ingest_order" varchar(20)[],
   "tie_breaker" varchar(30),
   "note" text
 );
-COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 같은 항목에 값이 여러 개면 무엇을 대표로 보여주나? — 대표값 선택 규칙. 연결/별도 우선순위(basis_preference)를 먼저 보고 그다음 출처 우선순위(source_order)를 본다. 코드에 3벌로 흩어져 있던 로직을 표 하나로 통합, 구 indicator_source_config(161행)를 흡수';
-COMMENT ON COLUMN core.canonical_rule."basis_preference" IS '1순위 축';
-COMMENT ON COLUMN core.canonical_rule."source_order" IS '2순위 타이브레이크';
-COMMENT ON COLUMN core.canonical_rule."tie_breaker" IS 'enum: latest_collected|highest_status|manual';
+COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 같은 항목에 값이 여러 개면 무엇을 대표로 보여주나? — 대표값 선택 규칙(260820 확정 골격). 접을 때는 출처 우선순위(source_order)→적재경로 우선순위(ingest_order)→tie_breaker→id 순서로 하나를 고른다. basis(연결/별도)는 여기서 접지 않고 파티션에 남긴다 — 지표마다 경계를 따로 고르면 분자·분모가 어긋나는 사고가 나기 때문. 구 indicator_source_config에서는 표시 우선순위만 가져오고 수집 계획(work_period)은 그 표에 그대로 둔다';
+COMMENT ON COLUMN core.canonical_rule."id" IS 'PK를 id로 풀어 indicator_code NULL(전역행)을 허용';
+COMMENT ON COLUMN core.canonical_rule."indicator_code" IS 'NULL이면 전역 기본 순서 행. UNIQUE NULLS NOT DISTINCT(ux_canonical_scope)라 전역행도 1행만';
+COMMENT ON COLUMN core.canonical_rule."basis_preference" IS '접기에는 쓰지 않는다 — 파생 계산과 순위표가 경계(연결/별도)를 고를 때만 사용';
+COMMENT ON COLUMN core.canonical_rule."source_order" IS '접기 1순위 — 출처(source_code) 우선순위. 지표행에 일부만 적으면 나머지는 전역 순서를 이어붙인다(array_cat)';
+COMMENT ON COLUMN core.canonical_rule."ingest_order" IS '[신설] · 접기 2순위 — 적재경로(data_source) 우선순위. 코드 2곳에 복제돼 있던 SRC_RANK 하드코딩 7값을 흡수';
+COMMENT ON COLUMN core.canonical_rule."tie_breaker" IS 'enum: latest_collected|highest_status|manual · 접기 3순위. 그래도 남으면 id가 최종 결정';
 
 CREATE TABLE ops.indicator_data (
   "id" bigint PRIMARY KEY,
@@ -679,6 +692,16 @@ CREATE TABLE serving.v_esg_news (
 );
 COMMENT ON TABLE serving.v_esg_news IS '[영역:서빙] [기존] L4 · ESG 뉴스 서빙 표 (1,579행)';
 
+CREATE TABLE serving.mv_industry_avg (
+  "cols" text
+);
+COMMENT ON TABLE serving.mv_industry_avg IS '[영역:서빙] [VIEW] [기존] L4 · Q. 업계 평균은 어디서 오나? — 업종×지표×연도의 평균·중앙값·최소최대 구체화뷰 (229,065행, 스테이징 기준). 수치형 지표만 집계하며 적재 후 리프레시가 필요하다(이관 finalize 절차에 포함)';
+
+CREATE TABLE serving.v_company_doc_coverage (
+  "cols" text
+);
+COMMENT ON TABLE serving.v_company_doc_coverage IS '[영역:서빙] [VIEW] [기존] L4 · Q. 어느 회사가 어떤 문서를 확보했나? — 회사별 SR·BR 공시 여부와 인덱싱된 청크 수·최신 연도를 모은 커버리지 뷰(V10, SR 수집 현황 API가 읽는다)';
+
 CREATE TABLE raw.source_document_company (
   "id" bigint PRIMARY KEY,
   "srdoc_id" bigint NOT NULL,
@@ -736,6 +759,7 @@ COMMENT ON TABLE serving.v_fact_core IS '[영역:서빙] [VIEW] [신규] L4 · Q
 ALTER TABLE raw.etl_job_log ADD FOREIGN KEY ("job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("crawl_job_id") REFERENCES raw.etl_job ("id");
 ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("committed_data_id") REFERENCES ops.indicator_data ("id");
+ALTER TABLE raw.etl_crawl_raw ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
 ALTER TABLE raw.etl_review_queue ADD FOREIGN KEY ("crawl_raw_id") REFERENCES raw.etl_crawl_raw ("id");
 ALTER TABLE core.indicator_component ADD FOREIGN KEY ("indicator_code") REFERENCES core.indicator_master ("indicator_code");
 ALTER TABLE core.indicator_component ADD FOREIGN KEY ("supersedes_id") REFERENCES core.indicator_component ("id");
