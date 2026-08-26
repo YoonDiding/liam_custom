@@ -91,10 +91,10 @@ COMMENT ON COLUMN raw.etl_crawl_raw."status" IS 'enum: pending|mapped|committed|
 COMMENT ON COLUMN raw.etl_crawl_raw."committed_data_id" IS '값↔원문 링크 (96.0% 보유). FK는 Phase C';
 COMMENT ON COLUMN raw.etl_crawl_raw."verified" IS '축 10 재료. 현재 75% 미검증';
 COMMENT ON COLUMN raw.etl_crawl_raw."dedup_key" IS 'GENERATED: company_raw || ''|'' || indicator_code || ''|'' || regexp_replace(coalesce(raw_label · 신 5원소 (구 9원소에서 회사 4칸→company_raw 1칸). concat_ws는 STABLE이라 || 동치 구현. UNIQUE는 Phase C — 지금 걸면 기존 31,807행 충돌';
-COMMENT ON COLUMN raw.etl_crawl_raw."srdoc_id" IS '[신설] · SR→PG 직행 경로 — 이 관측이 어느 문서에서 나왔는지(source_document 판본사슬 참조)';
-COMMENT ON COLUMN raw.etl_crawl_raw."doc_page" IS '[신설] · 문서 안 페이지 위치 — Vision 추출 근거';
-COMMENT ON COLUMN raw.etl_crawl_raw."component_code" IS '[신설] · 문서 주도 추출이 판정한 component 후보 — 조립 단계 재료. 지표미정 관측은 indicator_code와 함께 NULL일 수 있다';
-COMMENT ON COLUMN raw.etl_crawl_raw."basis" IS '[신설] · 원문이 밝힌 경계(연결/별도 등) — basis 채움 사다리의 1순위 재료';
+COMMENT ON COLUMN raw.etl_crawl_raw."srdoc_id" IS '[신설] · 이 값을 어느 보고서 파일에서 읽었는지 — source_document의 해당 문서를 가리킨다. 지속가능경영보고서에서 바로 PG로 적재하는 경로에서 채워진다';
+COMMENT ON COLUMN raw.etl_crawl_raw."doc_page" IS '[신설] · 그 문서의 몇 페이지에서 읽었는지 — 나중에 근거를 확인할 때 쓴다';
+COMMENT ON COLUMN raw.etl_crawl_raw."component_code" IS '[신설] · 문서에서 값을 뽑을 때 판정한 세부 항목. 아직 어느 지표의 값인지 정해지지 않은 관측은 지표 코드와 함께 비워 둘 수 있다';
+COMMENT ON COLUMN raw.etl_crawl_raw."basis" IS '[신설] · 원문에 적혀 있던 기준(연결/별도 등). 원문이 직접 밝힌 것만 적고, 없으면 비워 둔다';
 
 CREATE TABLE raw.etl_review_queue (
   "id" bigint PRIMARY KEY,
@@ -300,13 +300,13 @@ CREATE TABLE core.canonical_rule (
   "tie_breaker" varchar(30),
   "note" text
 );
-COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 같은 항목에 값이 여러 개면 무엇을 대표로 보여주나? — 대표값 선택 규칙(260820 확정 골격). 접을 때는 출처 우선순위(source_order)→적재경로 우선순위(ingest_order)→tie_breaker→id 순서로 하나를 고른다. basis(연결/별도)는 여기서 접지 않고 파티션에 남긴다 — 지표마다 경계를 따로 고르면 분자·분모가 어긋나는 사고가 나기 때문. 구 indicator_source_config에서는 표시 우선순위만 가져오고 수집 계획(work_period)은 그 표에 그대로 둔다';
-COMMENT ON COLUMN core.canonical_rule."id" IS 'PK를 id로 풀어 indicator_code NULL(전역행)을 허용';
-COMMENT ON COLUMN core.canonical_rule."indicator_code" IS 'NULL이면 전역 기본 순서 행. UNIQUE NULLS NOT DISTINCT(ux_canonical_scope)라 전역행도 1행만';
-COMMENT ON COLUMN core.canonical_rule."basis_preference" IS '접기에는 쓰지 않는다 — 파생 계산과 순위표가 경계(연결/별도)를 고를 때만 사용';
-COMMENT ON COLUMN core.canonical_rule."source_order" IS '접기 1순위 — 출처(source_code) 우선순위. 지표행에 일부만 적으면 나머지는 전역 순서를 이어붙인다(array_cat)';
-COMMENT ON COLUMN core.canonical_rule."ingest_order" IS '[신설] · 접기 2순위 — 적재경로(data_source) 우선순위. 코드 2곳에 복제돼 있던 SRC_RANK 하드코딩 7값을 흡수';
-COMMENT ON COLUMN core.canonical_rule."tie_breaker" IS 'enum: latest_collected|highest_status|manual · 접기 3순위. 그래도 남으면 id가 최종 결정';
+COMMENT ON TABLE core.canonical_rule IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 같은 항목에 값이 여러 개면 무엇을 대표로 보여주나? — 대표값 선택 규칙. 여러 출처의 값이 겹치면 출처 우선순위(source_order)를 먼저 보고, 같으면 적재 경로 우선순위(ingest_order), 그다음 tie_breaker, 마지막엔 id 순서로 하나를 고른다. 연결/별도(basis)는 여기서 합치지 않고 각각 따로 대표값을 만든다 — 지표마다 다른 기준을 골라 버리면 비율 지표에서 분자와 분모의 기준이 어긋날 수 있기 때문. 구 indicator_source_config에서는 표시 우선순위만 가져오고, 수집 계획(work_period)은 그 표에 그대로 둔다';
+COMMENT ON COLUMN core.canonical_rule."id" IS '지표 코드 대신 id를 PK로 쓴다 — 지표 코드가 빈(모든 지표 공통) 행도 있어야 하기 때문';
+COMMENT ON COLUMN core.canonical_rule."indicator_code" IS '비어 있으면 모든 지표에 공통으로 적용되는 기본 순서 행. UNIQUE 제약이 NULL도 하나로 세기 때문에(NULLS NOT DISTINCT) 기본 순서 행도 하나만 만들 수 있다';
+COMMENT ON COLUMN core.canonical_rule."basis_preference" IS '대표값을 고를 때는 쓰지 않는다. 파생 지표를 계산하거나 순위표를 만들 때 연결/별도 중 어느 쪽을 쓸지 고르는 용도';
+COMMENT ON COLUMN core.canonical_rule."source_order" IS '출처(source_code) 우선순위 — 대표값을 고를 때 가장 먼저 보는 기준. 지표별 행에 일부 출처만 적으면 나머지는 공통 기본 순서를 뒤에 이어 붙여 적용한다';
+COMMENT ON COLUMN core.canonical_rule."ingest_order" IS '[신설] · 적재 경로(data_source) 우선순위 — 출처 순위가 같을 때 두 번째로 보는 기준. 코드 두 곳에 복사돼 있던 우선순위 하드코딩을 이 컬럼으로 옮겼다';
+COMMENT ON COLUMN core.canonical_rule."tie_breaker" IS 'enum: latest_collected|highest_status|manual · 앞의 두 순위로도 못 가르면 마지막으로 보는 기준. 그래도 남으면 id가 작은 행을 고른다';
 
 CREATE TABLE ops.indicator_data (
   "id" bigint PRIMARY KEY,
@@ -695,12 +695,12 @@ COMMENT ON TABLE serving.v_esg_news IS '[영역:서빙] [기존] L4 · ESG 뉴�
 CREATE TABLE serving.mv_industry_avg (
   "cols" text
 );
-COMMENT ON TABLE serving.mv_industry_avg IS '[영역:서빙] [VIEW] [기존] L4 · Q. 업계 평균은 어디서 오나? — 업종×지표×연도의 평균·중앙값·최소최대 구체화뷰 (229,065행, 스테이징 기준). 수치형 지표만 집계하며 적재 후 리프레시가 필요하다(이관 finalize 절차에 포함)';
+COMMENT ON TABLE serving.mv_industry_avg IS '[영역:서빙] [VIEW] [기존] L4 · Q. 업계 평균은 어디서 오나? — 업종×지표×연도별 평균·중앙값·최소·최대를 미리 계산해 둔 표 (229,065행). 숫자형 지표만 집계하며, 데이터를 새로 적재한 뒤에는 다시 계산(리프레시)해야 반영된다';
 
 CREATE TABLE serving.v_company_doc_coverage (
   "cols" text
 );
-COMMENT ON TABLE serving.v_company_doc_coverage IS '[영역:서빙] [VIEW] [기존] L4 · Q. 어느 회사가 어떤 문서를 확보했나? — 회사별 SR·BR 공시 여부와 인덱싱된 청크 수·최신 연도를 모은 커버리지 뷰(V10, SR 수집 현황 API가 읽는다)';
+COMMENT ON TABLE serving.v_company_doc_coverage IS '[영역:서빙] [VIEW] [기존] L4 · Q. 어느 회사의 보고서를 얼마나 확보했나? — 회사별로 지속가능경영보고서(SR)·사업보고서(BR)의 공시 여부와, 검색용으로 잘라 넣은 문서 조각 수·가장 최근 연도를 모아 보여주는 뷰. 보고서 수집 현황 화면이 읽는다';
 
 CREATE TABLE raw.source_document_company (
   "id" bigint PRIMARY KEY,
