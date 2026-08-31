@@ -652,6 +652,80 @@ CREATE TABLE raw.c_kisa_disclosure (
 );
 COMMENT ON TABLE raw.c_kisa_disclosure IS '[영역:출처 원본] [기존] L0 · KISA 정보보호공시 원본. 공시 1건=행 1개, S48 값들의 파생원(행이 있는지로 판단)·doc_ref KISA:{id} 대상';
 
+CREATE TABLE raw.dart_corp_code (
+  "cols" text
+);
+COMMENT ON TABLE raw.dart_corp_code IS '[영역:출처 원본] [신규] L0 · Q. DART에 등록된 법인 전체 목록은? — corpCode 목록 스냅샷(118,784 법인). 명부에 없는 회사가 실재하는 법인인지 확인하는 앵커. 목록에서 사라져도 행을 지우지 않고 removed_at만 찍는다';
+
+CREATE TABLE raw.dart_corp_code_change (
+  "cols" text
+);
+COMMENT ON TABLE raw.dart_corp_code_change IS '[영역:출처 원본] [신규] L0 · Q. 법인 목록에서 무엇이 바뀌었나? — 갱신 때 달라진 필드만 한 행씩 기록. corp_name 변경 행이 곧 사명 변경(개명) 후보다';
+
+CREATE TABLE raw.dart_company_profile (
+  "cols" text
+);
+COMMENT ON TABLE raw.dart_company_profile IS '[영역:출처 원본] [신규] L0 · Q. 이 회사의 대표자·주소·설립일은? — DART 기업개황 스냅샷(명부 스코프 3,515사). 개황은 명부에 승격하지 않고 이 스냅샷을 조인해 쓴다 — 동명이사 교차검증·서빙 카드 재료·covered 판정의 개황 조회 대체';
+
+CREATE TABLE raw.dart_company_profile_change (
+  "cols" text
+);
+COMMENT ON TABLE raw.dart_company_profile_change IS '[영역:출처 원본] [신규] L0 · Q. 이 회사의 개황에서 무엇이 바뀌었나? — 대표자·주소 등 필드 단위 변경 기록. corp_name 변경이 개명 검토의 입력이고, 처리 여부는 company_master_history 조인으로 판정한다(전용 상태 컬럼 없음)';
+
+CREATE TABLE raw.srdoc_extraction (
+  "id" bigint PRIMARY KEY,
+  "srdoc_id" integer NOT NULL,
+  "task" text NOT NULL,
+  "model" text,
+  "result" jsonb,
+  "error" text,
+  "pages" int[],
+  "cost_usd" numeric(10,4),
+  "created_at" timestamptz NOT NULL,
+  "applied_at" timestamptz
+);
+COMMENT ON TABLE raw.srdoc_extraction IS '[영역:파이프라인] [신규] L0 · Q. 이 문서에서 AI가 뭘 뽑았나? — 문서×태스크별 추출 결과 정본. 배치와 어드민 단건이 함께 기록하며, 같은 (문서, 태스크)의 최신 성공 행이 현행이다. 증분 실행의 ''이미 뽑았나'' 판정도 이 테이블 기준(jsonl 파일은 부산물)';
+COMMENT ON COLUMN raw.srdoc_extraction."srdoc_id" IS '문서 삭제 시 함께 삭제(CASCADE)';
+COMMENT ON COLUMN raw.srdoc_extraction."task" IS 'document_meta · env_quant_table 등 추출 태스크 이름';
+COMMENT ON COLUMN raw.srdoc_extraction."model" IS '실제 사용한 AI 모델';
+COMMENT ON COLUMN raw.srdoc_extraction."result" IS '추출 결과 원본 (실패 시 NULL)';
+COMMENT ON COLUMN raw.srdoc_extraction."error" IS '실패 사유 (성공 시 NULL)';
+COMMENT ON COLUMN raw.srdoc_extraction."pages" IS '탐색·투입된 페이지 번호들';
+COMMENT ON COLUMN raw.srdoc_extraction."applied_at" IS '메타 반영 시각 — NULL이면 아직 반영 전';
+
+CREATE TABLE raw.covered_unmatched (
+  "id" bigint PRIMARY KEY,
+  "srdoc_id" integer NOT NULL,
+  "name_raw" text NOT NULL,
+  "evidence" text,
+  "status" text NOT NULL,
+  "resolution" jsonb,
+  "company_id" integer,
+  "created_at" timestamptz NOT NULL,
+  "updated_at" timestamptz NOT NULL,
+  UNIQUE ("srdoc_id", "name_raw")
+);
+COMMENT ON TABLE raw.covered_unmatched IS '[영역:파이프라인] [신규] L0 · Q. 보고서에 나온 회사인데 명부에 없으면? — covered 미매칭 큐. 추출·반영이 넣고 병합기가 판정(DART 대조·기업개황 보강)해 resolution에 근거를 남기며, 사람 승인 1회로 등록까지 간다. 등록 후 메타 재반영이 covered를 증분 채운다';
+COMMENT ON COLUMN raw.covered_unmatched."name_raw" IS '추출된 사명 원문. UNIQUE(srdoc_id, name_raw)로 재추출 중복 유입 방지';
+COMMENT ON COLUMN raw.covered_unmatched."evidence" IS '원문 근거 구절';
+COMMENT ON COLUMN raw.covered_unmatched."status" IS 'enum: pending|generic|auto_confirmed|candidate|not_found|registered|held|rejected';
+COMMENT ON COLUMN raw.covered_unmatched."resolution" IS '판정 근거 — DART 표 셀·corp_code·기업개황 스냅샷 등';
+COMMENT ON COLUMN raw.covered_unmatched."company_id" IS '등록/확정된 회사';
+
+CREATE TABLE core.company_master_history (
+  "id" bigint PRIMARY KEY,
+  "company_id" integer NOT NULL,
+  "changed_at" timestamptz NOT NULL,
+  "change_type" varchar(10) NOT NULL,
+  "reason" text,
+  "old_row" jsonb,
+  "new_row" jsonb
+);
+COMMENT ON TABLE core.company_master_history IS '[영역:규칙 및 히스토리] [신규] L3 · Q. 명부의 이 회사 정보가 언제 어떻게 바뀌었나? — 등록·개명·정정의 행 단위 이력. 값 테이블의 이력(indicator_data_history)과 같은 규약으로, 트리거가 자동 기록하고 사유는 SET LOCAL app.change_reason으로 남긴다. 원본이 삭제돼도 이력은 남아야 해서 FK를 걸지 않는다';
+COMMENT ON COLUMN core.company_master_history."company_id" IS 'FK 미선언 논리참조 — 회사 행이 삭제돼도 이력은 남아야 하기 때문';
+COMMENT ON COLUMN core.company_master_history."change_type" IS 'enum: insert|update|delete';
+COMMENT ON COLUMN core.company_master_history."reason" IS 'app.change_reason으로 넘긴 사유 — 대량 시드는 bulk_backfill 스위치로 침묵';
+
 CREATE TABLE serving.company_profile (
   "cols" text
 );
@@ -781,6 +855,10 @@ ALTER TABLE ops.portal_credit_grant ADD FOREIGN KEY ("account_id") REFERENCES op
 ALTER TABLE ops.ai_quota ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
 ALTER TABLE ops.ai_usage_log ADD FOREIGN KEY ("account_id") REFERENCES ops.users ("id");
 ALTER TABLE core.company_synonym ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE raw.srdoc_extraction ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
+ALTER TABLE raw.covered_unmatched ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
+ALTER TABLE raw.covered_unmatched ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
+ALTER TABLE core.company_master_history ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
 ALTER TABLE raw.source_document_company ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
 ALTER TABLE raw.source_document_company ADD FOREIGN KEY ("company_id") REFERENCES core.company_master ("id");
 ALTER TABLE serving.srdoc_chunk ADD FOREIGN KEY ("srdoc_id") REFERENCES raw.source_document ("id");
