@@ -337,7 +337,7 @@ CREATE TABLE ops.indicator_data (
   "confirmed_by" varchar(60),
   "rule_applied" varchar(60)[]
 );
-COMMENT ON TABLE ops.indicator_data IS '[영역:파이프라인] [확장] L3 · Q. 확정된 값은 얼마인가? — 값의 정본 테이블. 행 하나를 회사·지표·component·연도·출처·basis 6가지로 식별하고, 보고된 원래 값(value_raw)과 정규화된 숫자(value_num)를 같은 행에 둔다. UNIQUE 제약은 Phase C에서 걸 예정';
+COMMENT ON TABLE ops.indicator_data IS '[영역:파이프라인] [확장] L3 · Q. 확정된 값은 얼마인가? — 값의 정본 테이블. 행 하나를 회사·지표·component·연도·출처·basis 6가지로 식별하고, 보고된 원래 값(value_raw)과 정규화된 숫자(value_num)를 같은 행에 둔다. 업무키 6원소 유니크가 걸려 있다(V22, 260901) — status가 rejected(검수 기각·중복 패자)인 행은 키 밖에 두어 값 이력을 보존한다';
 COMMENT ON COLUMN ops.indicator_data."sub_id" IS '[DEPRECATED] component_id로 대체. 이관 기간 보존(롤백 경로) 후 DROP';
 COMMENT ON COLUMN ops.indicator_data."value_raw" IS '🔒 원공시값 — 수정 API가 인자로 받지 않는다';
 COMMENT ON COLUMN ops.indicator_data."value_num" IS '✏️ 사람이 고칠 때 바뀌는 유일한 값 컬럼';
@@ -350,7 +350,7 @@ COMMENT ON COLUMN ops.indicator_data."basis_raw" IS '[신설] · 원문 기준 �
 COMMENT ON COLUMN ops.indicator_data."method" IS '[신설] · enum: location_based|market_based|unknown';
 COMMENT ON COLUMN ops.indicator_data."match_method" IS '[신설] · enum: bizr_no|exact_name|alias|fuzzy_name';
 COMMENT ON COLUMN ops.indicator_data."match_confidence" IS '[신설]';
-COMMENT ON COLUMN ops.indicator_data."status" IS '[신설] · enum: collected|parsed|rule_checked|corrected|confirmed|legacy · 축 10. 이관 전 데이터는 ''legacy'' — confirmed로 위장하지 않는다';
+COMMENT ON COLUMN ops.indicator_data."status" IS '[신설] · enum: collected|parsed|rule_checked|corrected|confirmed|legacy · 축 10. 이관 전 데이터는 ''legacy'' — confirmed로 위장하지 않는다. rejected=검수 기각·중복 패자(보존용, 유니크와 서빙 밖) — V21 추가';
 COMMENT ON COLUMN ops.indicator_data."status_at" IS '[신설]';
 COMMENT ON COLUMN ops.indicator_data."confirmed_by" IS '[신설]';
 COMMENT ON COLUMN ops.indicator_data."rule_applied" IS '[신설]';
